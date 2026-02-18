@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "Bash(go mod init:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(go get:*)",
+      "Bash(go build:*)",
+      "Bash(.spike-ddcci.exe)",
+      "Bash(C:\\\\code\\\\go\\\\monitor-brightness\\\\spike-ddcci.exe:*)",
+      "Bash(\"C:/code/go/monitor-brightness/spike-ddcci.exe\")",
+      "Bash(start \"\" \"C:/code/go/monitor-brightness/monibright.exe\")",
+      "Bash(start \"\" \"C:/code/go/monitor-brightness/spike-hotkey.exe\")",
+      "Bash(go mod vendor:*)",
+      "mcp__Desktop_Commander__read_file",
+      "mcp__Desktop_Commander__list_directory",
+      "Bash(find:*)",
+      "Bash(go vet:*)",
+      "Bash(ren \"C:\\\\code\\\\go\\\\monitor-brightness\\\\minimal\\\\NOTES.md\" \"CLAUDE.md\")",
+      "Bash(powershell:*)",
+      "Bash(start monibright.exe)",
+      "Bash(ren:*)",
+      "Bash(cmd /c \"cd /d C:\\\\code\\\\go && ren monitor-brightness monibright\")",
+      "Bash(cmd /c:*)",
+      "Bash(tasklist:*)",
+      "Bash(go run:*)",
+      "Bash(go generate:*)",
+      "Bash(go test:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git reset:*)",
+      "Bash(echo:*)",
+      "Bash(git commit:*)",
+      "Bash(start notepad++ \"C:\\\\Users\\\\alex\\\\.claude\\\\skills\\\\go\\\\SKILL.md\")",
+      "Bash(gh api:*)",
+      "Bash(python3:*)",
+      "Bash(git push:*)"
+    ]
+  }
+}
