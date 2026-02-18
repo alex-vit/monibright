@@ -5,14 +5,13 @@ import (
 	"log"
 	"os"
 
-	"github.com/alex-vit/monibright/internal/icon"
+	"github.com/alex-vit/monibright/icon"
 	"github.com/energye/systray"
 	"github.com/niluan304/ddcci"
-	"golang.design/x/hotkey"
 	"golang.org/x/sys/windows/registry"
 )
 
-var version = "dev"
+var version = "1.0.0"
 
 const (
 	VKNumpad0    = 0x60
@@ -130,18 +129,21 @@ func onReady() {
 	addQuit()
 
 	// Hotkeys: Win+Numpad1=10%, Win+Numpad2=20%, ..., Win+Numpad0=100%
-	hotkeyErrs := make(chan error, 10)
+	var hkeys [][2]int
+	var levels []int
 	for i := 0; i <= 9; i++ {
-		vk := VKNumpad0 + i
+		hkeys = append(hkeys, [2]int{modWin, VKNumpad0 + i})
 		level := i * 10
 		if level == 0 {
 			level = 100
 		}
-		go registerHotkey(vk, level, setBrightness, hotkeyErrs)
+		levels = append(levels, level)
 	}
 	go func() {
-		for err := range hotkeyErrs {
-			log.Fatalf("hotkey conflict (is another instance running?): %v", err)
+		if err := registerHotkeys(hkeys, func(id int) {
+			setBrightness(levels[id])
+		}); err != nil {
+			log.Printf("hotkey registration error: %v", err)
 		}
 	}()
 }
@@ -153,17 +155,6 @@ func checkItem(items map[int]*systray.MenuItem, level int) {
 		} else {
 			item.Uncheck()
 		}
-	}
-}
-
-func registerHotkey(vk int, level int, set func(int), errs chan<- error) {
-	hk := hotkey.New([]hotkey.Modifier{hotkey.ModWin}, hotkey.Key(vk))
-	if err := hk.Register(); err != nil {
-		errs <- fmt.Errorf("Win+Numpad%d (%d%%): %w", vk-VKNumpad0, level, err)
-		return
-	}
-	for range hk.Keydown() {
-		set(level)
 	}
 }
 

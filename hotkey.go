@@ -1,11 +1,10 @@
-// Package hotkey provides a thin wrapper around the Windows RegisterHotKey API.
-// It replaces golang.design/x/hotkey for our use case: register global hotkeys
-// and get notified on keydown via a callback. No keyup tracking, no polling,
-// no per-hotkey threads — just one message loop for all hotkeys.
+// Hotkey provides a thin wrapper around the Windows RegisterHotKey API.
+// Inspired by golang.design/x/hotkey (https://github.com/nicot/hotkey).
+// Simplified for our use case: one message loop, no keyup tracking, no polling.
 
 //go:build windows
 
-package hotkey
+package main
 
 import (
 	"fmt"
@@ -22,17 +21,13 @@ var (
 	procGetMessageW      = user32.NewProc("GetMessageW")
 )
 
-// Modifier flags for RegisterHotKey.
 const (
-	ModAlt   = 0x1
-	ModCtrl  = 0x2
-	ModShift = 0x4
-	ModWin   = 0x8
+	modWin = 0x8
+
+	wmHotkey = 0x0312
 )
 
-const wmHotkey = 0x0312
-
-type msg struct {
+type wmMsg struct {
 	hwnd    uintptr
 	message uint32
 	wParam  uintptr
@@ -41,7 +36,7 @@ type msg struct {
 	pt      [2]int32
 }
 
-// RegisterHotkeys registers each (modifier|vk) combo as a global hotkey and
+// registerHotkeys registers each (modifier|vk) combo as a global hotkey and
 // runs fn(id) on the calling goroutine's OS thread whenever a hotkey fires.
 // The id passed to fn is the index into the hotkeys slice.
 //
@@ -50,7 +45,7 @@ type msg struct {
 //
 // hotkeys is a slice of [2]int{modifiers, vk}. Returns an error if any
 // registration fails (but still registers the rest).
-func RegisterHotkeys(hotkeys [][2]int, fn func(id int)) error {
+func registerHotkeys(hotkeys [][2]int, fn func(id int)) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
@@ -64,7 +59,7 @@ func RegisterHotkeys(hotkeys [][2]int, fn func(id int)) error {
 		}
 	}
 
-	var m msg
+	var m wmMsg
 	for {
 		// GetMessageW blocks until a message is available. Returns 0 on WM_QUIT, -1 on error.
 		ret, _, _ := procGetMessageW.Call(uintptr(unsafe.Pointer(&m)), 0, 0, 0)

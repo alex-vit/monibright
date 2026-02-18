@@ -14,5 +14,5 @@ Windows system tray app for monitor brightness control via DDC/CI.
 ## Build
 
 ```bash
-go build -ldflags "-H=windowsgui" -o monibright.exe ./cmd/monibright-reference/
+go build -ldflags "-H=windowsgui" -o monibright.exe .
 ```
