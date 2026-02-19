@@ -29,7 +29,7 @@ notes/               # development notes (YYYY-MM-DD-<slug>.md per task)
 
 ## Development Notes
 
-Keep notes in `notes/` during feature work. Use `/notes` or say "note that..." to update them. See `.claude/skills/notes/SKILL.md` for full conventions.
+Keep notes in `notes/` during feature work. Use `/notes` or say "note that..." to update them.
 
 ## Build
 
