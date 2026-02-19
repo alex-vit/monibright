@@ -24,7 +24,12 @@ Goal: reduce dependency surface by reimplementing thin wrappers ourselves.
 main.go              # app entry point, tray menu, brightness control
 hotkey.go            # own RegisterHotKey wrapper (inspired by golang.design/x/hotkey)
 icon/                # embedded tray icon (yellow circle); go generate ./icon regenerates .ico
+notes/               # development notes (YYYY-MM-DD-<slug>.md per task)
 ```
+
+## Development Notes
+
+Keep notes in `notes/` during feature work. Use `/notes` or say "note that..." to update them. See `.claude/skills/notes/SKILL.md` for full conventions.
 
 ## Build
 
