@@ -11,10 +11,11 @@ Manage development notes in the `notes/` directory. Each note file is named `YYY
 ## Triggers
 
 Besides explicit `/notes` invocation, update notes proactively when:
-- The user says "note that", "make a note", "keep track of", or similar
+- The user says "note that", "make a note", "keep track of", "add a todo", or similar
 - A significant decision is made or an approach is chosen
 - Requirements are clarified or refined
 - A deliverable is completed or scope changes
+- A concrete next step or action item emerges from discussion
 
 ## File naming
 
@@ -29,6 +30,7 @@ Keep it lightweight. Use headers, bullets, checklists as needed — not every no
 - What we're working on and why
 - Goals / acceptance criteria
 - Deliverables (checklist if useful)
+- **TODOs** — `- [ ]` checklist of action items and next steps
 - Decisions made and rationale
 - Open questions
 
@@ -37,5 +39,6 @@ Keep it lightweight. Use headers, bullets, checklists as needed — not every no
 - **New task, no matching notes file**: create one with today's date and a descriptive slug. Fill in whatever context is known from the conversation.
 - **Existing notes file for current task**: read it, then update with new information.
 - **On `/notes` with no obvious update**: display the current notes to the user.
+- **TODOs**: when the user asks to "add a todo" or a clear action item comes up in discussion, add it as `- [ ]` under a `## TODO` section in the relevant notes file. Proactively add TODOs when implementation steps are agreed upon. Keep TODOs in sync with actual progress — check off (`- [x]`) items as they are completed during the session.
 - Keep it concise. Prefer terse bullet points over prose.
 - Do not remove old decisions — they form a log. Prefix superseded ones with ~~strikethrough~~.
