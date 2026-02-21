@@ -4,12 +4,17 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"syscall"
+	"unsafe"
 
 	"github.com/alex-vit/monibright/icon"
 	"github.com/energye/systray"
 	"github.com/niluan304/ddcci"
 	"golang.org/x/sys/windows/registry"
 )
+
+var kernel32 = syscall.NewLazyDLL("kernel32.dll")
+var procCreateMutexW = kernel32.NewProc("CreateMutexW")
 
 var version = "1.0.0"
 
@@ -26,6 +31,8 @@ var (
 )
 
 func main() {
+	name, _ := syscall.UTF16PtrFromString("MoniBrightMutex")
+	procCreateMutexW.Call(0, 0, uintptr(unsafe.Pointer(name)))
 	systray.Run(onReady, nil)
 }
 
