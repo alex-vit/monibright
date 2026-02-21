@@ -149,8 +149,14 @@ func onReady() {
 }
 
 func checkItem(items map[int]*systray.MenuItem, level int) {
+	// Round to nearest preset (10, 20, ..., 100) so non-preset values
+	// (e.g. 75% set via monitor buttons) still show a checkmark.
+	nearest := ((level + 5) / 10) * 10
+	if nearest < 10 {
+		nearest = 10
+	}
 	for l, item := range items {
-		if l == level {
+		if l == nearest {
 			item.Check()
 		} else {
 			item.Uncheck()
