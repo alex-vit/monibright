@@ -1,4 +1,4 @@
-# Handle non-preset brightness in UI
+# Handle non-preset brightness in UI (Done)
 
 ## Task
 When the current brightness doesn't match a preset exactly (e.g. 75% set via monitor buttons), show the closest preset as checked instead of showing no checkmark.

@@ -1,4 +1,4 @@
-# Notes skill
+# Notes skill (Done)
 
 ## Task
 Create a Claude Code skill for keeping development notes during feature work.

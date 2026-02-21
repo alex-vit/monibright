@@ -1,4 +1,4 @@
-# Refactor onReady closures to package-level state
+# Refactor onReady closures to package-level state (Done)
 
 ## Task
 Extract closures from `onReady` into top-level functions backed by package-level variables, keeping `onReady` focused on initialization and wiring.
