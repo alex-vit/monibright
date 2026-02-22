@@ -22,6 +22,7 @@ Goal: reduce dependency surface by reimplementing thin wrappers ourselves.
 
 ```
 main.go              # app entry point, tray menu, brightness control
+debug.go / release.go # build-tag controlled const debug bool
 hotkey.go            # own RegisterHotKey wrapper (inspired by golang.design/x/hotkey)
 icon/                # embedded tray icon (yellow circle); go generate ./icon regenerates .ico
 notes/               # development notes (YYYY-MM-DD-<slug>.md per task)
@@ -33,11 +34,12 @@ Keep notes in `notes/` during feature work. Use `/notes` or say "note that..." t
 
 ## Build
 
+Debug vs release is controlled by build tags (`-tags debug`), not by version string.
 See global `go` skill for ldflags reference.
 
 ```bash
-go build -ldflags "-H=windowsgui" -o monibright.exe .                          # dev
-go build -ldflags "-X main.version=1.1.0 -H=windowsgui" -o monibright.exe .   # release
+go build -tags debug -ldflags "-H=windowsgui" -o monibright.exe .                          # dev
+go build -ldflags "-X main.version=1.1.0 -H=windowsgui" -o monibright.exe .                # release
 ```
 
 ## Ideas

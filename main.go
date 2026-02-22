@@ -20,7 +20,7 @@ import (
 var kernel32 = syscall.NewLazyDLL("kernel32.dll")
 var procCreateMutexW = kernel32.NewProc("CreateMutexW")
 
-var version = "dev"
+var version = ""
 
 var logPath string
 
@@ -42,14 +42,19 @@ func (lw isoLogWriter) Write(p []byte) (int, error) {
 	return fmt.Fprintf(lw.w, "%s %s", time.Now().Format("2006-01-02 15:04:05"), p)
 }
 
-func isDebugBuild() bool { return version == "dev" }
+func displayVersion() string {
+	if version != "" {
+		return version
+	}
+	return "dev"
+}
 
 func main() {
 	name, _ := syscall.UTF16PtrFromString("MoniBrightMutex")
 	procCreateMutexW.Call(0, 0, uintptr(unsafe.Pointer(name)))
 
 	log.SetFlags(0)
-	if isDebugBuild() {
+	if debug {
 		appData := os.Getenv("APPDATA")
 		dir := filepath.Join(appData, "monibright")
 		os.MkdirAll(dir, 0o755)
@@ -61,7 +66,7 @@ func main() {
 	} else {
 		log.SetOutput(io.Discard)
 	}
-	log.Printf("MoniBright %s starting (debug=%v)", version, isDebugBuild())
+	log.Printf("MoniBright %s starting (debug=%v)", displayVersion(), debug)
 
 	systray.Run(onReady, nil)
 }
@@ -70,10 +75,10 @@ func onReady() {
 	systray.SetIcon(icon.Data)
 	systray.SetTooltip("MoniBright")
 
-	title := "MoniBright " + version
+	title := "MoniBright " + displayVersion()
 	mTitle := systray.AddMenuItem(title, "")
 	mTitle.Disable()
-	if isDebugBuild() {
+	if debug {
 		mLog := systray.AddMenuItem("Open log", "Open debug log file")
 		mLog.Click(func() {
 			exec.Command("rundll32", "url.dll,FileProtocolHandler", logPath).Start()
