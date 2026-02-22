@@ -68,6 +68,8 @@ func main() {
 	}
 	log.Printf("MoniBright %s starting (debug=%v)", displayVersion(), debug)
 
+	cleanOldBinary()
+
 	systray.Run(onReady, nil)
 }
 
@@ -85,6 +87,8 @@ func onReady() {
 		})
 	}
 	systray.AddSeparator()
+
+	go autoUpdate()
 
 	sysMonitors, err := ddcci.NewSystemMonitors()
 	log.Printf("enumerated %d system monitors (err=%v)", len(sysMonitors), err)
@@ -126,7 +130,6 @@ func onReady() {
 
 	// Wire up click handlers
 	for level, item := range brightItems {
-		level := level
 		item.Click(func() { setBrightness(level) })
 	}
 
