@@ -180,8 +180,47 @@ func refreshCheck() {
 		return
 	}
 	log.Printf("GetBrightness: current=%d", current)
+
+	// DDC/CI handles go stale after monitor sleep/wake and return 0.
+	// Re-enumerate monitors and retry once.
+	if current == 0 {
+		log.Printf("brightness=0 is suspicious, re-enumerating monitors")
+		if refreshMonitors() {
+			_, current, _, err = allMonitors[0].GetBrightness()
+			if err != nil {
+				log.Printf("GetBrightness retry failed: %v", err)
+				return
+			}
+			log.Printf("GetBrightness retry: current=%d", current)
+		}
+	}
+
 	checkItem(brightItems, current)
 	updateIcon(current)
+}
+
+func refreshMonitors() bool {
+	sysMonitors, err := ddcci.NewSystemMonitors()
+	if err != nil || len(sysMonitors) == 0 {
+		log.Printf("re-enumerate failed: %d monitors, err=%v", len(sysMonitors), err)
+		return false
+	}
+	var monitors []*ddcci.PhysicalMonitor
+	for i := range sysMonitors {
+		m, err := ddcci.NewPhysicalMonitor(&sysMonitors[i])
+		if err != nil {
+			log.Printf("re-enumerate monitor %d: %v", i, err)
+			continue
+		}
+		monitors = append(monitors, m)
+	}
+	if len(monitors) == 0 {
+		log.Printf("re-enumerate: no usable monitors")
+		return false
+	}
+	allMonitors = monitors
+	log.Printf("re-enumerated %d physical monitors", len(allMonitors))
+	return true
 }
 
 func setBrightness(level int) {
