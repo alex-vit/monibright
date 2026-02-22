@@ -166,6 +166,10 @@ func onReady() {
 	}()
 }
 
+func updateIcon(level int) {
+	systray.SetIcon(icon.Generate(level))
+}
+
 func refreshCheck() {
 	_, current, _, err := allMonitors[0].GetBrightness()
 	if err != nil {
@@ -174,6 +178,7 @@ func refreshCheck() {
 	}
 	log.Printf("GetBrightness: current=%d", current)
 	checkItem(brightItems, current)
+	updateIcon(current)
 }
 
 func setBrightness(level int) {
@@ -186,6 +191,7 @@ func setBrightness(level int) {
 		}
 	}
 	checkItem(brightItems, level)
+	updateIcon(level)
 }
 
 func showMenu(menu systray.IMenu) {
