@@ -7,6 +7,7 @@
 - `gen_icon.go`: accept a PNG/image file as input and convert to multi-size .ico
 - ~~Self-update via GitHub releases — check on startup, silent download, tray "restart to update" option~~
 - ~~Dynamic tray icon reflecting brightness — bright yellow sun at 100%, nearly eclipsed at 10%~~
+- Embed an app icon via Windows manifest so MoniBright has a proper icon in Start Menu / desktop shortcuts (currently shows generic exe icon)
 - Input source switch — DDC/CI VCP code 0x60 can switch monitor inputs (HDMI1, DP1, etc.); add tray submenu or hotkey
 - Color temperature / "true tone" — f.lux-style warm shift on schedule; DDC/CI VCP 0x14 (color temp) or Windows gamma ramp API
 
@@ -19,3 +20,4 @@
 - ~~Handle non-preset brightness values in UI (e.g. user sets 75% via monitor buttons — no checkmark matches)~~
 - ~~Refactor `onReady` closures to top-level functions with package-level state~~
 - ~~Self-update — DIY stdlib implementation, zero new deps~~
+- Code signing — sign the exe/installer to eliminate the SmartScreen "Run anyway" scare dialog (requires a code signing certificate; EV certs get instant reputation, standard certs build it over time)
