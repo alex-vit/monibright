@@ -8,6 +8,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"runtime"
 	"syscall"
 	"unsafe"
@@ -58,6 +59,8 @@ func registerHotkeys(hotkeys [][2]int, fn func(id int)) error {
 			}
 		}
 	}
+
+	log.Printf("registered %d hotkeys (firstErr=%v)", len(hotkeys), firstErr)
 
 	var m wmMsg
 	for {

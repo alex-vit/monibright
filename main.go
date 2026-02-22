@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/alex-vit/monibright/icon"
@@ -35,12 +36,19 @@ var (
 	mAutostart  *systray.MenuItem
 )
 
+type isoLogWriter struct{ w io.Writer }
+
+func (lw isoLogWriter) Write(p []byte) (int, error) {
+	return fmt.Fprintf(lw.w, "%s %s", time.Now().Format("2006-01-02 15:04:05"), p)
+}
+
 func isDebugBuild() bool { return version == "dev" }
 
 func main() {
 	name, _ := syscall.UTF16PtrFromString("MoniBrightMutex")
 	procCreateMutexW.Call(0, 0, uintptr(unsafe.Pointer(name)))
 
+	log.SetFlags(0)
 	if isDebugBuild() {
 		appData := os.Getenv("APPDATA")
 		dir := filepath.Join(appData, "monibright")
@@ -48,7 +56,7 @@ func main() {
 		logPath = filepath.Join(dir, "debug.log")
 		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 		if err == nil {
-			log.SetOutput(f)
+			log.SetOutput(isoLogWriter{f})
 		}
 	} else {
 		log.SetOutput(io.Discard)
@@ -68,7 +76,7 @@ func onReady() {
 	if isDebugBuild() {
 		mLog := systray.AddMenuItem("Open log", "Open debug log file")
 		mLog.Click(func() {
-			exec.Command("cmd", "/c", "start", "", logPath).Start()
+			exec.Command("rundll32", "url.dll,FileProtocolHandler", logPath).Start()
 		})
 	}
 	systray.AddSeparator()
@@ -149,8 +157,6 @@ func onReady() {
 			setBrightness(levels[id])
 		}); err != nil {
 			log.Printf("hotkey registration error: %v", err)
-		} else {
-			log.Printf("registered %d hotkeys", len(hkeys))
 		}
 	}()
 }

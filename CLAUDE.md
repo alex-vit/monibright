@@ -36,8 +36,8 @@ Keep notes in `notes/` during feature work. Use `/notes` or say "note that..." t
 See global `go` skill for ldflags reference.
 
 ```bash
-go build -o monibright.exe .                                                   # dev
-go build -ldflags "-X main.version=0.1.0 -H=windowsgui" -o monibright.exe .   # release
+go build -ldflags "-H=windowsgui" -o monibright.exe .                          # dev
+go build -ldflags "-X main.version=1.1.0 -H=windowsgui" -o monibright.exe .   # release
 ```
 
 ## Ideas
