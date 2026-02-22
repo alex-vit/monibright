@@ -2,7 +2,7 @@
 
 Windows system tray app for monitor brightness control via DDC/CI.
 
-[Download v1.1.0](https://github.com/alex-vit/monibright/releases/tag/v1.1.0) — **monibright-setup.exe** (installer) or **monibright.exe** (portable)
+[Download v1.2.0](https://github.com/alex-vit/monibright/releases/tag/v1.2.0) — **monibright-setup.exe** (installer) or **monibright.exe** (portable)
 
 <img width="264" height="429" alt="Screenshot (16)" src="https://github.com/user-attachments/assets/1d280d0f-e689-46db-9dda-da2eb86e13bc" />
 
