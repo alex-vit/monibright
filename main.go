@@ -2,8 +2,11 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"syscall"
 	"unsafe"
 
@@ -16,7 +19,9 @@ import (
 var kernel32 = syscall.NewLazyDLL("kernel32.dll")
 var procCreateMutexW = kernel32.NewProc("CreateMutexW")
 
-var version = "1.0.0"
+var version = "dev"
+
+var logPath string
 
 const (
 	VKNumpad0    = 0x60
@@ -30,9 +35,26 @@ var (
 	mAutostart  *systray.MenuItem
 )
 
+func isDebugBuild() bool { return version == "dev" }
+
 func main() {
 	name, _ := syscall.UTF16PtrFromString("MoniBrightMutex")
 	procCreateMutexW.Call(0, 0, uintptr(unsafe.Pointer(name)))
+
+	if isDebugBuild() {
+		appData := os.Getenv("APPDATA")
+		dir := filepath.Join(appData, "monibright")
+		os.MkdirAll(dir, 0o755)
+		logPath = filepath.Join(dir, "debug.log")
+		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+		if err == nil {
+			log.SetOutput(f)
+		}
+	} else {
+		log.SetOutput(io.Discard)
+	}
+	log.Printf("MoniBright %s starting (debug=%v)", version, isDebugBuild())
+
 	systray.Run(onReady, nil)
 }
 
@@ -43,9 +65,16 @@ func onReady() {
 	title := "MoniBright " + version
 	mTitle := systray.AddMenuItem(title, "")
 	mTitle.Disable()
+	if isDebugBuild() {
+		mLog := systray.AddMenuItem("Open log", "Open debug log file")
+		mLog.Click(func() {
+			exec.Command("cmd", "/c", "start", "", logPath).Start()
+		})
+	}
 	systray.AddSeparator()
 
 	sysMonitors, err := ddcci.NewSystemMonitors()
+	log.Printf("enumerated %d system monitors (err=%v)", len(sysMonitors), err)
 	if err != nil || len(sysMonitors) == 0 {
 		mErr := systray.AddMenuItem("No monitors found", "")
 		mErr.Disable()
@@ -62,6 +91,7 @@ func onReady() {
 		}
 		allMonitors = append(allMonitors, m)
 	}
+	log.Printf("initialized %d physical monitors", len(allMonitors))
 	if len(allMonitors) == 0 {
 		mErr := systray.AddMenuItem("No usable monitors", "")
 		mErr.Disable()
@@ -119,6 +149,8 @@ func onReady() {
 			setBrightness(levels[id])
 		}); err != nil {
 			log.Printf("hotkey registration error: %v", err)
+		} else {
+			log.Printf("registered %d hotkeys", len(hkeys))
 		}
 	}()
 }
@@ -126,15 +158,20 @@ func onReady() {
 func refreshCheck() {
 	_, current, _, err := allMonitors[0].GetBrightness()
 	if err != nil {
+		log.Printf("GetBrightness failed: %v", err)
 		return
 	}
+	log.Printf("GetBrightness: current=%d", current)
 	checkItem(brightItems, current)
 }
 
 func setBrightness(level int) {
+	log.Printf("setting brightness to %d%%", level)
 	for i, m := range allMonitors {
 		if err := m.SetBrightness(level); err != nil {
-			log.Printf("monitor %d: failed to set brightness: %v", i, err)
+			log.Printf("monitor %d: SetBrightness(%d) error: %v", i, level, err)
+		} else {
+			log.Printf("monitor %d: SetBrightness(%d) ok", i, level)
 		}
 	}
 	checkItem(brightItems, level)

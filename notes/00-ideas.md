@@ -10,6 +10,10 @@
 - Input source switch — DDC/CI VCP code 0x60 can switch monitor inputs (HDMI1, DP1, etc.); add tray submenu or hotkey
 - Color temperature / "true tone" — f.lux-style warm shift on schedule; DDC/CI VCP 0x14 (color temp) or Windows gamma ramp API
 
+## Bugs
+
+- **Brightness commands silently fail after input switch** — hotkeys and menu selections update the UI checkmark but do not change actual monitor brightness. Started after switching monitor inputs. DDC/CI handle may go stale when the monitor's active input changes. Investigate: does the monitor need re-enumeration? Does `SetBrightness` return an error that we're missing?
+
 ## Done
 
 - ~~Handle non-preset brightness values in UI (e.g. user sets 75% via monitor buttons — no checkmark matches)~~
