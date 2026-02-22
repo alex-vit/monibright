@@ -40,6 +40,6 @@ go build -o monibright.exe .                                                   #
 go build -ldflags "-X main.version=0.1.0 -H=windowsgui" -o monibright.exe .   # release
 ```
 
-## Future Ideas
+## Ideas
 
-See [`notes/00-future-ideas.md`](notes/00-future-ideas.md).
+See [`notes/00-ideas.md`](notes/00-ideas.md).

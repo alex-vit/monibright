@@ -1,10 +1,14 @@
-# Future Ideas
+# Ideas
 
+- **Debug logging** — write to a log file (e.g. `%APPDATA%/monibright/debug.log`) for diagnosing DDC/CI failures, monitor enumeration issues, etc.; toggle via tray menu or CLI flag
 - Custom popup slider window anchored to tray icon (like Twinkle Tray) instead of menu presets
 - Investigate promoting tray icon to always-visible (not in overflow area) on app start
 - Multi-monitor UX: per-monitor submenus? Separate hotkey sets? Currently sets all monitors together, reads from first
 - `gen_icon.go`: accept a PNG/image file as input and convert to multi-size .ico
 - Self-update via [go-selfupdate](https://github.com/creativeprojects/go-selfupdate) — check on startup, silent download, tray "restart to update" option
+- Dynamic tray icon reflecting brightness — bright yellow sun at 100%, nearly eclipsed at 10%
+- Input source switch — DDC/CI VCP code 0x60 can switch monitor inputs (HDMI1, DP1, etc.); add tray submenu or hotkey
+- Color temperature / "true tone" — f.lux-style warm shift on schedule; DDC/CI VCP 0x14 (color temp) or Windows gamma ramp API
 
 ## Done
 
