@@ -42,6 +42,10 @@ go build -tags debug -ldflags "-H=windowsgui" -o monibright.exe .               
 go build -ldflags "-X main.version=1.1.0 -H=windowsgui" -o monibright.exe .                # release
 ```
 
+## Debugging
+
+Fullscreen DirectX/Vulkan games often suppress or hook the Win key and other modifiers. When investigating hotkey or keyboard issues, rule out other running apps (especially games) before suspecting our code. See `notes/2026-02-23-win-key-stuck.md`.
+
 ## Ideas
 
 See [`notes/00-ideas.md`](notes/00-ideas.md).
