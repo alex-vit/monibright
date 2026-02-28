@@ -225,13 +225,35 @@ func refreshMonitors() bool {
 
 func setBrightness(level int) {
 	log.Printf("setting brightness to %d%%", level)
-	for i, m := range allMonitors {
-		if err := m.SetBrightness(level); err != nil {
-			log.Printf("monitor %d: SetBrightness(%d) error: %v", i, level, err)
-		} else {
-			log.Printf("monitor %d: SetBrightness(%d) ok", i, level)
+
+	setAll := func() {
+		for i, m := range allMonitors {
+			if err := m.SetBrightness(level); err != nil {
+				log.Printf("monitor %d: SetBrightness(%d) error: %v", i, level, err)
+			} else {
+				log.Printf("monitor %d: SetBrightness(%d) ok", i, level)
+			}
 		}
 	}
+
+	setAll()
+
+	// Verify the write took effect. Stale DDC/CI handles after sleep/wake
+	// silently fail: SetBrightness returns nil but the monitor doesn't change.
+	// Re-enumerate for fresh handles and retry.
+	_, cur, _, err := allMonitors[0].GetBrightness()
+	log.Printf("post-set verify: current=%d expected=%d err=%v", cur, level, err)
+	diff := cur - level
+	if diff < 0 {
+		diff = -diff
+	}
+	if err != nil || diff > 5 {
+		log.Printf("stale handle detected, refreshing monitors and retrying")
+		if refreshMonitors() {
+			setAll()
+		}
+	}
+
 	checkItem(brightItems, level)
 	updateIcon(level)
 }

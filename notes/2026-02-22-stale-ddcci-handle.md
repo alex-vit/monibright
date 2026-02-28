@@ -1,12 +1,20 @@
-# Stale DDC/CI Handle After Monitor Sleep
+# Stale DDC/CI Handle After Sleep/Wake
 
-## Bug
+## Bug (v1: monitor sleep)
 
 After the monitor sleeps and wakes (~1-2 hours idle), `GetBrightness()` returns
 `current=0` even though the real brightness is 70-80%. This causes:
 
 - Menu shows 10% checked (nearest preset to 0)
 - Tray icon goes invisible (eclipse arc at t=0 = fully eclipsed = all transparent pixels)
+
+## Bug (v2: full computer sleep)
+
+After full computer sleep/wake (S3), `SetBrightness()` silently fails — returns
+nil but the monitor brightness doesn't change. Both hotkeys and menu clicks
+update the icon/checkmark but have no effect on the screen. The v1 fix
+(`refreshCheck` detecting `current=0`) didn't catch this because `refreshCheck`
+only runs when opening the menu, and hotkey presses bypass it entirely.
 
 ## Log Evidence
 
@@ -28,12 +36,19 @@ Windows invalidates these handles. The first DDC/CI call on a stale handle
 returns zero/garbage rather than an error. Subsequent calls (or new handles)
 work fine — the DDC/CI bus recovers on its own.
 
-## Fix
+## Fix (v1: read path)
 
 In `refreshCheck()`, treat `current=0` as suspicious. Re-enumerate monitors
 (`NewSystemMonitors` + `NewPhysicalMonitor`) to get fresh handles, then retry
 `GetBrightness`. This replaces `allMonitors` globally so subsequent
 `SetBrightness` calls also use fresh handles.
+
+## Fix (v2: write path)
+
+In `setBrightness()`, read back brightness after setting. If the readback
+doesn't match the expected level (diff > 5), the handles are stale —
+re-enumerate monitors and retry the set. This catches the silent-fail case
+where `SetBrightness` returns nil but doesn't actually change the monitor.
 
 ## Alternatives Considered
 
@@ -46,9 +61,9 @@ In `refreshCheck()`, treat `current=0` as suspicious. Re-enumerate monitors
 
 ## Observations
 
-- `SetBrightness` on a stale handle reports "ok" and appears to work (the
-  monitor actually changes brightness). It may be that the write path wakes
-  the DDC/CI bus while the read path doesn't.
+- `SetBrightness` on a stale handle reports "ok" (nil error). After monitor
+  sleep, it may still change the monitor. After full computer sleep (S3), it
+  silently does nothing — the monitor stays at the previous brightness.
 - The recovery is instant — no delay needed between re-enumerate and retry.
 - 0% brightness is theoretically valid but extremely unlikely in practice.
   If a user genuinely sets 0%, the retry will confirm it.
