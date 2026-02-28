@@ -171,6 +171,7 @@ func onReady() {
 
 func updateIcon(level int) {
 	systray.SetIcon(icon.Generate(level))
+	systray.SetTooltip(fmt.Sprintf("MoniBright — %d%%", level))
 }
 
 func refreshCheck() {

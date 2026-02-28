@@ -34,5 +34,8 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 [Run]
 Filename: "{app}\monibright.exe"; Description: "Launch MoniBright"; Flags: nowait postinstall skipifsilent
 
+[UninstallDelete]
+Type: filesandordirs; Name: "{userappdata}\monibright"
+
 [UninstallRun]
 Filename: "taskkill"; Parameters: "/F /IM monibright.exe"; Flags: runhidden; RunOnceId: "KillMoniBright"
