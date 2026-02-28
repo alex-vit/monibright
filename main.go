@@ -100,6 +100,7 @@ func onReady() {
 		allMonitors = append(allMonitors, m)
 	}
 	log.Printf("initialized %d physical monitors", len(allMonitors))
+	go runSlider()
 	if len(allMonitors) == 0 {
 		mErr := systray.AddMenuItem("No usable monitors", "")
 		mErr.Disable()
@@ -124,8 +125,8 @@ func onReady() {
 		item.Click(func() { setBrightness(level) })
 	}
 
-	// Re-read brightness before showing menu (both left and right click)
-	systray.SetOnClick(showMenu)
+	// Left-click: floating slider popup. Right-click: preset menu.
+	systray.SetOnClick(func(menu systray.IMenu) { showSlider() })
 	systray.SetOnRClick(showMenu)
 
 	systray.AddSeparator()
