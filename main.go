@@ -54,19 +54,13 @@ func main() {
 	procCreateMutexW.Call(0, 0, uintptr(unsafe.Pointer(name)))
 
 	log.SetFlags(0)
-	if debug {
-		appData := os.Getenv("APPDATA")
-		dir := filepath.Join(appData, "monibright")
-		os.MkdirAll(dir, 0o755)
-		logPath = filepath.Join(dir, "debug.log")
-		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-		if err == nil {
-			log.SetOutput(isoLogWriter{f})
-		}
-	} else {
-		log.SetOutput(io.Discard)
+	dataDir := filepath.Join(os.Getenv("LocalAppData"), "MoniBright")
+	os.MkdirAll(dataDir, 0o755)
+	logPath = filepath.Join(dataDir, "log.txt")
+	if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
+		log.SetOutput(isoLogWriter{f})
 	}
-	log.Printf("MoniBright %s starting (debug=%v)", displayVersion(), debug)
+	log.Printf("MoniBright %s starting", displayVersion())
 
 	cleanOldBinary()
 
@@ -80,12 +74,9 @@ func onReady() {
 	title := "MoniBright " + displayVersion()
 	mTitle := systray.AddMenuItem(title, "")
 	mTitle.Disable()
-	if debug {
-		mLog := systray.AddMenuItem("Open log", "Open debug log file")
-		mLog.Click(func() {
-			exec.Command("rundll32", "url.dll,FileProtocolHandler", logPath).Start()
-		})
-	}
+	systray.AddMenuItem("Open log", "Open log file").Click(func() {
+		exec.Command("rundll32", "url.dll,FileProtocolHandler", logPath).Start()
+	})
 	systray.AddSeparator()
 
 	go autoUpdate()
@@ -317,7 +308,7 @@ func autostartEnable() error {
 		return err
 	}
 	defer k.Close()
-	return k.SetStringValue(registryName, exePath)
+	return k.SetStringValue(registryName, `"`+exePath+`"`)
 }
 
 func autostartDisable() error {

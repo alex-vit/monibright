@@ -19,14 +19,11 @@ jobs:
           go-version-file: go.mod
 
       - name: Build
-        run: go build -ldflags "-X main.version=${{ github.ref_name }} -H=windowsgui" -o monibright.exe .
-
-      - name: Build installer
-        run: iscc /DAppVersion=${{ github.ref_name }} installer.iss
+        run: pwsh ./scripts/build-windows-release.ps1 -Version ${{ github.ref_name }}
 
       - uses: softprops/action-gh-release@v2
         with:
           files: |
-            monibright.exe
-            Output/monibright-setup.exe
+            out/monibright.exe
+            out/monibright-setup.exe
           generate_release_notes: true

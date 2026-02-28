@@ -13,10 +13,19 @@ nul
 
 # Output of go coverage
 *.out
+coverage.*
+*.coverprofile
+profile.cov
 
 # Go workspace
 go.work
 go.work.sum
+
+# env file
+.env
+
+# macOS
+.DS_Store
 
 # IDE
 .idea/
@@ -24,6 +33,9 @@ go.work.sum
 *.swp
 *.swo
 *~
+
+# Build output
+out/
 
 # Claude Code
 .claude/settings.local.json

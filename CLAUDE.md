@@ -34,13 +34,12 @@ Keep notes in `notes/` during feature work. Use `/notes` or say "note that..." t
 
 ## Build
 
-Debug vs release is controlled by build tags (`-tags debug`), not by version string.
-See global `go` skill for ldflags reference.
-
 ```bash
-go build -tags debug -ldflags "-H=windowsgui" -o monibright.exe .                          # dev
-go build -ldflags "-X main.version=1.1.0 -H=windowsgui" -o monibright.exe .                # release
+go build -ldflags "-H=windowsgui" -o monibright.exe .               # dev (project root)
+pwsh ./scripts/build-windows-release.ps1 -Version vX.Y.Z            # release → out/monibright.exe + out/monibright-setup.exe
 ```
+
+Logs are written to `%LocalAppData%\MoniBright\log.txt` in all builds.
 
 ## Debugging
 
