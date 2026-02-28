@@ -25,5 +25,6 @@ go.work.sum
 *.swo
 *~
 
-# Claude Code local settings
+# Claude Code
 .claude/settings.local.json
+.claude/worktrees/
