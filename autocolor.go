@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,8 +15,8 @@ var (
 	autoColorStop   chan struct{}
 	autoColorMu     sync.Mutex
 
-	cachedSched     sunSchedule
-	cachedSchedDay  int // YearDay when last fetched, 0 = never
+	cachedSched    sunSchedule
+	cachedSchedDay int // YearDay when last fetched, 0 = never
 )
 
 // detectLocation determines latitude/longitude from IP geolocation,
@@ -30,7 +31,7 @@ func detectLocation() (lat, lon float64, err error) {
 }
 
 func locationFromIP() (lat, lon float64, err error) {
-	req, err := http.NewRequest("GET", "https://iplocation.info", nil)
+	req, err := http.NewRequest(http.MethodGet, "https://iplocation.info", nil) //nolint:noctx
 	if err != nil {
 		return 0, 0, err
 	}
@@ -41,7 +42,7 @@ func locationFromIP() (lat, lon float64, err error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return 0, 0, fmt.Errorf("HTTP %d", resp.StatusCode)
@@ -55,7 +56,7 @@ func locationFromIP() (lat, lon float64, err error) {
 		return 0, 0, err
 	}
 	if result.Lat == 0 && result.Lon == 0 {
-		return 0, 0, fmt.Errorf("got zero coordinates")
+		return 0, 0, errors.New("got zero coordinates")
 	}
 	return result.Lat, result.Lon, nil
 }
@@ -81,12 +82,16 @@ type sunSchedule struct {
 // fetchSunSchedule queries the sunrise-sunset.io API for the given coordinates.
 func fetchSunSchedule(lat, lon float64) (sunSchedule, error) {
 	url := fmt.Sprintf("https://api.sunrisesunset.io/json?lat=%f&lng=%f&date=today", lat, lon)
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(url)
+	req, err := http.NewRequest(http.MethodGet, url, nil) //nolint:noctx
 	if err != nil {
 		return sunSchedule{}, err
 	}
-	defer resp.Body.Close()
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return sunSchedule{}, err
+	}
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return sunSchedule{}, fmt.Errorf("HTTP %d", resp.StatusCode)
@@ -94,10 +99,10 @@ func fetchSunSchedule(lat, lon float64) (sunSchedule, error) {
 
 	var result struct {
 		Results struct {
-			Sunrise          string `json:"sunrise"`
-			Sunset           string `json:"sunset"`
-			CivilTwBegin     string `json:"civil_twilight_begin"`
-			CivilTwEnd       string `json:"civil_twilight_end"`
+			Sunrise      string `json:"sunrise"`
+			Sunset       string `json:"sunset"`
+			CivilTwBegin string `json:"civil_twilight_begin"`
+			CivilTwEnd   string `json:"civil_twilight_end"`
 		} `json:"results"`
 		Status string `json:"status"`
 	}
@@ -317,58 +322,58 @@ func syncColorTempSlider(kelvin int) {
 		return
 	}
 	if sliderHWND != 0 {
-		procPostMessageW.Call(sliderHWND, wmSyncColorTemp, uintptr(kelvin), 0)
+		procPostMessageW.Call(sliderHWND, wmSyncColorTemp, uintptr(kelvin), 0) //nolint:errcheck
 	}
 }
 
 // tzCoords maps IANA timezone names to approximate city coordinates.
 var tzCoords = map[string][2]float64{
-	"America/New_York":      {40.71, -74.01},
-	"America/Chicago":       {41.88, -87.63},
-	"America/Denver":        {39.74, -104.99},
-	"America/Los_Angeles":   {34.05, -118.24},
-	"America/Anchorage":     {61.22, -149.90},
-	"Pacific/Honolulu":      {21.31, -157.86},
-	"America/Phoenix":       {33.45, -112.07},
-	"America/Toronto":       {43.65, -79.38},
-	"America/Vancouver":     {49.28, -123.12},
-	"America/Mexico_City":   {19.43, -99.13},
-	"America/Sao_Paulo":     {-23.55, -46.63},
+	"America/New_York":               {40.71, -74.01},
+	"America/Chicago":                {41.88, -87.63},
+	"America/Denver":                 {39.74, -104.99},
+	"America/Los_Angeles":            {34.05, -118.24},
+	"America/Anchorage":              {61.22, -149.90},
+	"Pacific/Honolulu":               {21.31, -157.86},
+	"America/Phoenix":                {33.45, -112.07},
+	"America/Toronto":                {43.65, -79.38},
+	"America/Vancouver":              {49.28, -123.12},
+	"America/Mexico_City":            {19.43, -99.13},
+	"America/Sao_Paulo":              {-23.55, -46.63},
 	"America/Argentina/Buenos_Aires": {-34.60, -58.38},
-	"America/Bogota":        {4.71, -74.07},
-	"America/Lima":          {-12.05, -77.04},
-	"Europe/London":         {51.51, -0.13},
-	"Europe/Paris":          {48.86, 2.35},
-	"Europe/Berlin":         {52.52, 13.41},
-	"Europe/Madrid":         {40.42, -3.70},
-	"Europe/Rome":           {41.90, 12.50},
-	"Europe/Amsterdam":      {52.37, 4.90},
-	"Europe/Brussels":       {50.85, 4.35},
-	"Europe/Vienna":         {48.21, 16.37},
-	"Europe/Zurich":         {47.38, 8.54},
-	"Europe/Stockholm":      {59.33, 18.07},
-	"Europe/Oslo":           {59.91, 10.75},
-	"Europe/Helsinki":       {60.17, 24.94},
-	"Europe/Warsaw":         {52.23, 21.01},
-	"Europe/Moscow":         {55.76, 37.62},
-	"Europe/Istanbul":       {41.01, 28.98},
-	"Europe/Athens":         {37.98, 23.73},
-	"Europe/Bucharest":      {44.43, 26.10},
-	"Asia/Tokyo":            {35.68, 139.69},
-	"Asia/Shanghai":         {31.23, 121.47},
-	"Asia/Hong_Kong":        {22.32, 114.17},
-	"Asia/Singapore":        {1.35, 103.82},
-	"Asia/Kolkata":          {28.61, 77.21},
-	"Asia/Seoul":            {37.57, 126.98},
-	"Asia/Taipei":           {25.03, 121.57},
-	"Asia/Bangkok":          {13.76, 100.50},
-	"Asia/Dubai":            {25.20, 55.27},
-	"Asia/Jerusalem":        {31.77, 35.22},
-	"Australia/Sydney":      {-33.87, 151.21},
-	"Australia/Melbourne":   {-37.81, 144.96},
-	"Australia/Perth":       {-31.95, 115.86},
-	"Pacific/Auckland":      {-36.85, 174.76},
-	"Africa/Cairo":          {30.04, 31.24},
-	"Africa/Johannesburg":   {-26.20, 28.04},
-	"Africa/Lagos":          {6.52, 3.38},
+	"America/Bogota":                 {4.71, -74.07},
+	"America/Lima":                   {-12.05, -77.04},
+	"Europe/London":                  {51.51, -0.13},
+	"Europe/Paris":                   {48.86, 2.35},
+	"Europe/Berlin":                  {52.52, 13.41},
+	"Europe/Madrid":                  {40.42, -3.70},
+	"Europe/Rome":                    {41.90, 12.50},
+	"Europe/Amsterdam":               {52.37, 4.90},
+	"Europe/Brussels":                {50.85, 4.35},
+	"Europe/Vienna":                  {48.21, 16.37},
+	"Europe/Zurich":                  {47.38, 8.54},
+	"Europe/Stockholm":               {59.33, 18.07},
+	"Europe/Oslo":                    {59.91, 10.75},
+	"Europe/Helsinki":                {60.17, 24.94},
+	"Europe/Warsaw":                  {52.23, 21.01},
+	"Europe/Moscow":                  {55.76, 37.62},
+	"Europe/Istanbul":                {41.01, 28.98},
+	"Europe/Athens":                  {37.98, 23.73},
+	"Europe/Bucharest":               {44.43, 26.10},
+	"Asia/Tokyo":                     {35.68, 139.69},
+	"Asia/Shanghai":                  {31.23, 121.47},
+	"Asia/Hong_Kong":                 {22.32, 114.17},
+	"Asia/Singapore":                 {1.35, 103.82},
+	"Asia/Kolkata":                   {28.61, 77.21},
+	"Asia/Seoul":                     {37.57, 126.98},
+	"Asia/Taipei":                    {25.03, 121.57},
+	"Asia/Bangkok":                   {13.76, 100.50},
+	"Asia/Dubai":                     {25.20, 55.27},
+	"Asia/Jerusalem":                 {31.77, 35.22},
+	"Australia/Sydney":               {-33.87, 151.21},
+	"Australia/Melbourne":            {-37.81, 144.96},
+	"Australia/Perth":                {-31.95, 115.86},
+	"Pacific/Auckland":               {-36.85, 174.76},
+	"Africa/Cairo":                   {30.04, 31.24},
+	"Africa/Johannesburg":            {-26.20, 28.04},
+	"Africa/Lagos":                   {6.52, 3.38},
 }

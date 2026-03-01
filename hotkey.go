@@ -78,7 +78,7 @@ func registerHotkeys(hotkeys [][2]int, fn func(id int)) error {
 	}
 
 	for i := range hotkeys {
-		procUnregisterHotKey.Call(0, uintptr(i+1))
+		procUnregisterHotKey.Call(0, uintptr(i+1)) //nolint:errcheck
 	}
 	return firstErr
 }

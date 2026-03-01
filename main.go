@@ -34,7 +34,7 @@ const (
 var (
 	allMonitors []*ddcci.PhysicalMonitor
 	brightItems map[int]*systray.MenuItem
-	mAutostart *systray.MenuItem
+	mAutostart  *systray.MenuItem
 )
 
 type isoLogWriter struct{ w io.Writer }
@@ -52,11 +52,11 @@ func displayVersion() string {
 
 func main() {
 	name, _ := syscall.UTF16PtrFromString("MoniBrightMutex")
-	procCreateMutexW.Call(0, 0, uintptr(unsafe.Pointer(name)))
+	procCreateMutexW.Call(0, 0, uintptr(unsafe.Pointer(name))) //nolint:errcheck
 
 	log.SetFlags(0)
 	dataDir = filepath.Join(os.Getenv("LocalAppData"), "MoniBright")
-	os.MkdirAll(dataDir, 0o755)
+	_ = os.MkdirAll(dataDir, 0o755)
 	logPath = filepath.Join(dataDir, "log.txt")
 	if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
 		log.SetOutput(isoLogWriter{f})
@@ -78,7 +78,7 @@ func onReady() {
 	mTitle := systray.AddMenuItem(title, "")
 	mTitle.Disable()
 	systray.AddMenuItem("Open log", "Open log file").Click(func() {
-		exec.Command("rundll32", "url.dll,FileProtocolHandler", logPath).Start()
+		_ = exec.Command("rundll32", "url.dll,FileProtocolHandler", logPath).Start() //nolint:noctx
 	})
 	systray.AddSeparator()
 
@@ -266,7 +266,7 @@ func setBrightness(level int) {
 
 func showMenu(menu systray.IMenu) {
 	refreshCheck()
-	menu.ShowMenu()
+	_ = menu.ShowMenu()
 }
 
 func toggleAutostart() {
@@ -310,7 +310,7 @@ func isAutostartEnabled() bool {
 	if err != nil {
 		return false
 	}
-	defer k.Close()
+	defer func() { _ = k.Close() }()
 	_, _, err = k.GetStringValue(registryName)
 	return err == nil
 }
@@ -324,7 +324,7 @@ func autostartEnable() error {
 	if err != nil {
 		return err
 	}
-	defer k.Close()
+	defer func() { _ = k.Close() }()
 	return k.SetStringValue(registryName, `"`+exePath+`"`)
 }
 
@@ -333,6 +333,6 @@ func autostartDisable() error {
 	if err != nil {
 		return err
 	}
-	defer k.Close()
+	defer func() { _ = k.Close() }()
 	return k.DeleteValue(registryName)
 }

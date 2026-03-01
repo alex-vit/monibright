@@ -59,7 +59,7 @@ func cleanOldBinary() {
 // checkForUpdate queries the GitHub releases API and returns the latest
 // version and asset download URL if it's newer than the current version.
 func checkForUpdate() (latestVer, downloadURL string, err error) {
-	req, err := http.NewRequest("GET", githubReleaseURL, nil)
+	req, err := http.NewRequest(http.MethodGet, githubReleaseURL, nil) //nolint:noctx
 	if err != nil {
 		return "", "", err
 	}
@@ -69,7 +69,7 @@ func checkForUpdate() (latestVer, downloadURL string, err error) {
 	if err != nil {
 		return "", "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", "", fmt.Errorf("GitHub API returned %d", resp.StatusCode)
@@ -100,11 +100,15 @@ func downloadUpdate(url string) (tmpPath string, err error) {
 		return "", err
 	}
 
-	resp, err := http.Get(url)
+	req, err := http.NewRequest(http.MethodGet, url, nil) //nolint:noctx
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("download returned %d", resp.StatusCode)
@@ -117,12 +121,12 @@ func downloadUpdate(url string) (tmpPath string, err error) {
 	}
 
 	if _, err := io.Copy(f, resp.Body); err != nil {
-		f.Close()
-		os.Remove(tmpPath)
+		_ = f.Close()
+		_ = os.Remove(tmpPath)
 		return "", err
 	}
 	if err := f.Close(); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return "", err
 	}
 
@@ -145,7 +149,7 @@ func applyUpdate(tmpPath string) error {
 		return fmt.Errorf("rename current to .old: %w", err)
 	}
 	if err := os.Rename(tmpPath, exe); err != nil {
-		os.Rename(old, exe)
+		_ = os.Rename(old, exe)
 		return fmt.Errorf("rename .tmp to exe: %w", err)
 	}
 

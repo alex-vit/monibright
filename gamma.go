@@ -10,10 +10,10 @@ import (
 )
 
 var (
-	procGetDC               = user32.NewProc("GetDC")
-	procReleaseDC           = user32.NewProc("ReleaseDC")
-	procSetDeviceGammaRamp  = modGdi32.NewProc("SetDeviceGammaRamp")
-	procGetDeviceGammaRamp  = modGdi32.NewProc("GetDeviceGammaRamp")
+	procGetDC              = user32.NewProc("GetDC")
+	procReleaseDC          = user32.NewProc("ReleaseDC")
+	procSetDeviceGammaRamp = modGdi32.NewProc("SetDeviceGammaRamp")
+	procGetDeviceGammaRamp = modGdi32.NewProc("GetDeviceGammaRamp")
 )
 
 // gammaRamp is a 3×256 array of uint16 values (R, G, B channels).
@@ -42,11 +42,12 @@ func kelvinToRGB(kelvin int) (r, g, b float64) {
 	}
 
 	// Blue
-	if temp >= 66 {
+	switch {
+	case temp >= 66:
 		b = 1.0
-	} else if temp <= 19 {
+	case temp <= 19:
 		b = 0.0
-	} else {
+	default:
 		b = (138.5177312231*math.Log(temp-10) - 305.0447927307) / 255.0
 	}
 
@@ -80,7 +81,7 @@ func applyColorTemp(kelvin int) {
 		log.Printf("gamma: GetDC failed")
 		return
 	}
-	defer procReleaseDC.Call(0, hdc)
+	defer procReleaseDC.Call(0, hdc) //nolint:errcheck
 
 	ret, _, err := procSetDeviceGammaRamp.Call(hdc, uintptr(unsafe.Pointer(&ramp)))
 	if ret == 0 {
@@ -95,7 +96,7 @@ func saveGammaRamp() {
 		log.Printf("gamma: GetDC failed (save)")
 		return
 	}
-	defer procReleaseDC.Call(0, hdc)
+	defer procReleaseDC.Call(0, hdc) //nolint:errcheck
 
 	ret, _, err := procGetDeviceGammaRamp.Call(hdc, uintptr(unsafe.Pointer(&savedRamp)))
 	if ret == 0 {
@@ -112,7 +113,7 @@ func restoreGammaRamp() {
 		log.Printf("gamma: GetDC failed (restore)")
 		return
 	}
-	defer procReleaseDC.Call(0, hdc)
+	defer procReleaseDC.Call(0, hdc) //nolint:errcheck
 
 	ret, _, err := syscall.SyscallN(procSetDeviceGammaRamp.Addr(), hdc, uintptr(unsafe.Pointer(&savedRamp)))
 	if ret == 0 {

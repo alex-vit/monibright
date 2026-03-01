@@ -21,3 +21,9 @@ Windows system tray app for monitor brightness and color temperature control via
 ```bash
 go build -ldflags "-H=windowsgui" -o monibright.exe .
 ```
+
+## Lint
+
+```bash
+golangci-lint run ./...
+```

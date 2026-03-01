@@ -1,0 +1,26 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - dupword
+    - durationcheck
+    - errname
+    - errorlint
+    - fatcontext
+    - goconst
+    - gocritic
+    - misspell
+    - nilerr
+    - noctx
+    - perfsprint
+    - reassign
+    - unconvert
+    - unparam
+    - usestdlibvars
+    - wastedassign
+
+formatters:
+  enable:
+    - goimports

@@ -30,7 +30,7 @@ func Generate(level int) []byte {
 	var pngs [][]byte
 	for _, size := range sizes {
 		var buf bytes.Buffer
-		png.Encode(&buf, eclipseImage(size, t, c))
+		_ = png.Encode(&buf, eclipseImage(size, t, c))
 		pngs = append(pngs, buf.Bytes())
 	}
 	return buildICO(sizes, pngs)
@@ -88,7 +88,7 @@ func buildICO(sizes []int, pngs [][]byte) []byte {
 	dataOffset := 6 + n*16
 
 	var buf bytes.Buffer
-	binary.Write(&buf, binary.LittleEndian, [3]uint16{0, 1, uint16(n)})
+	_ = binary.Write(&buf, binary.LittleEndian, [3]uint16{0, 1, uint16(n)})
 
 	offset := uint32(dataOffset)
 	for i, size := range sizes {
@@ -97,10 +97,10 @@ func buildICO(sizes []int, pngs [][]byte) []byte {
 			w = 0
 		}
 		buf.Write([]byte{w, w, 0, 0})
-		binary.Write(&buf, binary.LittleEndian, uint16(1))
-		binary.Write(&buf, binary.LittleEndian, uint16(32))
-		binary.Write(&buf, binary.LittleEndian, uint32(len(pngs[i])))
-		binary.Write(&buf, binary.LittleEndian, offset)
+		_ = binary.Write(&buf, binary.LittleEndian, uint16(1))
+		_ = binary.Write(&buf, binary.LittleEndian, uint16(32))
+		_ = binary.Write(&buf, binary.LittleEndian, uint32(len(pngs[i])))
+		_ = binary.Write(&buf, binary.LittleEndian, offset)
 		offset += uint32(len(pngs[i]))
 	}
 

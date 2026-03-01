@@ -58,10 +58,10 @@ const (
 	WM_DESTROY  = 0x0002
 	WM_HSCROLL  = 0x0114
 
-	WM_APP            = 0x8000
-	wmShowSlider      = WM_APP + 1
-	wmSyncSlider      = WM_APP + 2
-	wmSyncColorTemp   = WM_APP + 3
+	WM_APP          = 0x8000
+	wmShowSlider    = WM_APP + 1
+	wmSyncSlider    = WM_APP + 2
+	wmSyncColorTemp = WM_APP + 3
 
 	WA_INACTIVE = 0
 
@@ -161,7 +161,7 @@ func runSlider() {
 		DwSize: uint32(unsafe.Sizeof(initCommonControlsEx{})),
 		DwICC:  ICC_BAR_CLASSES,
 	}
-	procInitCommonControlsEx.Call(uintptr(unsafe.Pointer(&icc)))
+	procInitCommonControlsEx.Call(uintptr(unsafe.Pointer(&icc))) //nolint:errcheck
 
 	hInst, _, _ := procGetModuleHandleW.Call(0)
 	hCursor, _, _ := procLoadCursorW.Call(0, 32512) // IDC_ARROW
@@ -178,7 +178,7 @@ func runSlider() {
 		LpszClassName: className,
 	}
 	wc.CbSize = uint32(unsafe.Sizeof(wc))
-	procRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc)))
+	procRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc))) //nolint:errcheck
 
 	empty, _ := syscall.UTF16PtrFromString("")
 	offScreen := int32(-1000)
@@ -201,7 +201,7 @@ func runSlider() {
 
 	// --- Color temperature row (top) ---
 	colorTempLabel, _ := syscall.UTF16PtrFromString("Temperature")
-	procCreateWindowExW.Call(
+	procCreateWindowExW.Call( //nolint:errcheck
 		0,
 		uintptr(unsafe.Pointer(staticClass)),
 		uintptr(unsafe.Pointer(colorTempLabel)),
@@ -240,13 +240,13 @@ func runSlider() {
 	)
 
 	// Range 3500–6500, page size 500, initial position 6500
-	procSendMessageW.Call(tempTrackHWND, TBM_SETRANGE, 1, uintptr(6500<<16|3500))
-	procSendMessageW.Call(tempTrackHWND, TBM_SETPAGESIZE, 0, 500)
-	procSendMessageW.Call(tempTrackHWND, TBM_SETPOS, 1, 6500)
+	procSendMessageW.Call(tempTrackHWND, TBM_SETRANGE, 1, uintptr(6500<<16|3500)) //nolint:errcheck
+	procSendMessageW.Call(tempTrackHWND, TBM_SETPAGESIZE, 0, 500)                 //nolint:errcheck
+	procSendMessageW.Call(tempTrackHWND, TBM_SETPOS, 1, 6500)                     //nolint:errcheck
 
 	// --- Brightness row (bottom) ---
 	brightnessLabel, _ := syscall.UTF16PtrFromString("Brightness")
-	procCreateWindowExW.Call(
+	procCreateWindowExW.Call( //nolint:errcheck
 		0,
 		uintptr(unsafe.Pointer(staticClass)),
 		uintptr(unsafe.Pointer(brightnessLabel)),
@@ -274,8 +274,8 @@ func runSlider() {
 	)
 
 	// Range 0–100, page size 10
-	procSendMessageW.Call(sliderTrackHWND, TBM_SETRANGE, 1, 100<<16)
-	procSendMessageW.Call(sliderTrackHWND, TBM_SETPAGESIZE, 0, 10)
+	procSendMessageW.Call(sliderTrackHWND, TBM_SETRANGE, 1, 100<<16) //nolint:errcheck
+	procSendMessageW.Call(sliderTrackHWND, TBM_SETPAGESIZE, 0, 10)   //nolint:errcheck
 
 	// Async brightness updater
 	go func() {
@@ -299,8 +299,8 @@ func runSlider() {
 		if int32(ret) <= 0 {
 			break
 		}
-		procTranslateMessage.Call(uintptr(unsafe.Pointer(&m)))
-		procDispatchMessageW.Call(uintptr(unsafe.Pointer(&m)))
+		procTranslateMessage.Call(uintptr(unsafe.Pointer(&m))) //nolint:errcheck
+		procDispatchMessageW.Call(uintptr(unsafe.Pointer(&m))) //nolint:errcheck
 	}
 }
 
@@ -308,13 +308,13 @@ func sliderWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 	switch msg {
 	case wmSyncSlider:
 		if !sliderDragging {
-			procSendMessageW.Call(sliderTrackHWND, TBM_SETPOS, 1, wParam)
+			procSendMessageW.Call(sliderTrackHWND, TBM_SETPOS, 1, wParam) //nolint:errcheck
 			updatePctLabel(int(wParam))
 		}
 		return 0
 	case wmSyncColorTemp:
 		if !tempDragging {
-			procSendMessageW.Call(tempTrackHWND, TBM_SETPOS, 1, wParam)
+			procSendMessageW.Call(tempTrackHWND, TBM_SETPOS, 1, wParam) //nolint:errcheck
 			updateTempLabel(int(wParam))
 		}
 		return 0
@@ -334,19 +334,19 @@ func sliderWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 	case WM_CTLCOLORSTATIC:
 		if lParam == autoToggleHWND {
 			if autoColorActive {
-				procSetTextColor.Call(wParam, autoOnColor)
+				procSetTextColor.Call(wParam, autoOnColor) //nolint:errcheck
 			} else {
-				procSetTextColor.Call(wParam, autoOffColor)
+				procSetTextColor.Call(wParam, autoOffColor) //nolint:errcheck
 			}
-			procSetBkColor.Call(wParam, sliderBgColor)
+			procSetBkColor.Call(wParam, sliderBgColor) //nolint:errcheck
 			return sliderBgBrush
 		}
-		procSetTextColor.Call(wParam, sliderTextColor)
-		procSetBkColor.Call(wParam, sliderBgColor)
+		procSetTextColor.Call(wParam, sliderTextColor) //nolint:errcheck
+		procSetBkColor.Call(wParam, sliderBgColor)     //nolint:errcheck
 		return sliderBgBrush
 	case WM_ACTIVATE:
 		if wParam&0xFFFF == WA_INACTIVE {
-			procShowWindow.Call(hwnd, SW_HIDE)
+			procShowWindow.Call(hwnd, SW_HIDE) //nolint:errcheck
 		}
 		return 0
 	case WM_HSCROLL:
@@ -397,7 +397,7 @@ func sliderWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 		}
 		return 1
 	case WM_DESTROY:
-		procPostQuitMessage.Call(0)
+		procPostQuitMessage.Call(0) //nolint:errcheck
 		return 0
 	default:
 		ret, _, _ := procDefWindowProcW.Call(hwnd, msg, wParam, lParam)
@@ -459,11 +459,11 @@ func positionAndShow(hwnd uintptr, cursorX, cursorY int32) {
 		log.Printf("slider: GetBrightness: %v", err)
 		cur = 50
 	}
-	procSendMessageW.Call(sliderTrackHWND, TBM_SETPOS, 1, uintptr(cur))
-	updatePctLabel(int(cur))
+	procSendMessageW.Call(sliderTrackHWND, TBM_SETPOS, 1, uintptr(cur)) //nolint:errcheck
+	updatePctLabel(cur)
 
 	// Sync color temp trackbar to current value.
-	procSendMessageW.Call(tempTrackHWND, TBM_SETPOS, 1, uintptr(currentColorTemp))
+	procSendMessageW.Call(tempTrackHWND, TBM_SETPOS, 1, uintptr(currentColorTemp)) //nolint:errcheck
 	updateTempLabel(currentColorTemp)
 	updateAutoToggleText()
 
@@ -480,9 +480,9 @@ func positionAndShow(hwnd uintptr, cursorX, cursorY int32) {
 	sh, _, _ := procGetSystemMetrics.Call(SM_CYSCREEN)
 	x, y := sliderPosition(cursorX, cursorY, taskbar, int32(sw), int32(sh))
 
-	procMoveWindow.Call(hwnd, uintptr(x), uintptr(y), 260, 130, 1)
-	procSetForegroundWindow.Call(hwnd)
-	procShowWindow.Call(hwnd, SW_SHOW)
+	procMoveWindow.Call(hwnd, uintptr(x), uintptr(y), 260, 130, 1) //nolint:errcheck
+	procSetForegroundWindow.Call(hwnd)                             //nolint:errcheck
+	procShowWindow.Call(hwnd, SW_SHOW)                             //nolint:errcheck
 }
 
 // requestBrightness enqueues a brightness update, dropping any pending
@@ -497,7 +497,7 @@ func requestBrightness(level int) {
 
 func updatePctLabel(pct int) {
 	text, _ := syscall.UTF16PtrFromString(fmt.Sprintf("%d%%", pct))
-	procSetWindowTextW.Call(sliderPctHWND, uintptr(unsafe.Pointer(text)))
+	procSetWindowTextW.Call(sliderPctHWND, uintptr(unsafe.Pointer(text))) //nolint:errcheck
 }
 
 // syncSlider posts the current brightness level to the slider window so it
@@ -509,21 +509,21 @@ func syncSlider(level int) {
 		return // not yet initialized
 	}
 	if sliderHWND != 0 {
-		procPostMessageW.Call(sliderHWND, wmSyncSlider, uintptr(level), 0)
+		procPostMessageW.Call(sliderHWND, wmSyncSlider, uintptr(level), 0) //nolint:errcheck
 	}
 }
 
 func showSlider() {
 	<-sliderReady
 	var pt sliderPoint
-	procGetCursorPos.Call(uintptr(unsafe.Pointer(&pt)))
+	procGetCursorPos.Call(uintptr(unsafe.Pointer(&pt))) //nolint:errcheck
 	lp := uintptr(uint16(pt.X)) | uintptr(uint16(pt.Y))<<16
-	procPostMessageW.Call(sliderHWND, wmShowSlider, 0, lp)
+	procPostMessageW.Call(sliderHWND, wmShowSlider, 0, lp) //nolint:errcheck
 }
 
 func updateTempLabel(kelvin int) {
 	text, _ := syscall.UTF16PtrFromString(fmt.Sprintf("%dK", kelvin))
-	procSetWindowTextW.Call(tempValueHWND, uintptr(unsafe.Pointer(text)))
+	procSetWindowTextW.Call(tempValueHWND, uintptr(unsafe.Pointer(text))) //nolint:errcheck
 }
 
 // requestColorTemp enqueues a color temperature update, dropping any pending
@@ -545,7 +545,7 @@ func updateAutoToggleText() {
 		label = "Auto"
 	}
 	text, _ := syscall.UTF16PtrFromString(label)
-	procSetWindowTextW.Call(autoToggleHWND, uintptr(unsafe.Pointer(text)))
+	procSetWindowTextW.Call(autoToggleHWND, uintptr(unsafe.Pointer(text))) //nolint:errcheck
 }
 
 func handleAutoToggleClick() {
@@ -564,7 +564,7 @@ func handleAutoToggleClick() {
 		updateAutoToggleText()
 		go func() {
 			startAutoColor(from)
-			procPostMessageW.Call(sliderHWND, wmSyncAutoToggle, 0, 0)
+			procPostMessageW.Call(sliderHWND, wmSyncAutoToggle, 0, 0) //nolint:errcheck
 		}()
 	}
 }

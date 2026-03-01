@@ -75,10 +75,10 @@ func ico(sizes []int, pngs [][]byte) []byte {
 			w = 0
 		}
 		buf.Write([]byte{w, w, 0, 0})                                 // width, height, palette, reserved
-		binary.Write(&buf, binary.LittleEndian, uint16(1))             // color planes
-		binary.Write(&buf, binary.LittleEndian, uint16(32))            // bits per pixel
+		binary.Write(&buf, binary.LittleEndian, uint16(1))            // color planes
+		binary.Write(&buf, binary.LittleEndian, uint16(32))           // bits per pixel
 		binary.Write(&buf, binary.LittleEndian, uint32(len(pngs[i]))) // data size
-		binary.Write(&buf, binary.LittleEndian, offset)                // data offset
+		binary.Write(&buf, binary.LittleEndian, offset)               // data offset
 		offset += uint32(len(pngs[i]))
 	}
 

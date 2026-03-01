@@ -6,14 +6,14 @@ import "testing"
 
 func TestKelvinToRGB(t *testing.T) {
 	tests := []struct {
-		name          string
-		kelvin        int
-		wantRMin      float64
-		wantRMax      float64
-		wantGMin      float64
-		wantGMax      float64
-		wantBMin      float64
-		wantBMax      float64
+		name     string
+		kelvin   int
+		wantRMin float64
+		wantRMax float64
+		wantGMin float64
+		wantGMax float64
+		wantBMin float64
+		wantBMax float64
 	}{
 		{"6500K neutral white", 6500, 0.95, 1.0, 0.95, 1.0, 0.95, 1.0},
 		{"2700K warm", 2700, 0.95, 1.0, 0.50, 0.70, 0.10, 0.40},

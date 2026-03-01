@@ -37,8 +37,8 @@ func TestApplyUpdate(t *testing.T) {
 	exe := filepath.Join(dir, "monibright.exe")
 	tmp := exe + ".tmp"
 
-	os.WriteFile(exe, []byte("old"), 0o755)
-	os.WriteFile(tmp, []byte("new"), 0o755)
+	_ = os.WriteFile(exe, []byte("old"), 0o755)
+	_ = os.WriteFile(tmp, []byte("new"), 0o755)
 
 	// Patch os.Executable by testing the rename logic directly.
 	old := exe + ".old"
@@ -47,7 +47,7 @@ func TestApplyUpdate(t *testing.T) {
 		t.Fatalf("rename exe to old: %v", err)
 	}
 	if err := os.Rename(tmp, exe); err != nil {
-		os.Rename(old, exe)
+		_ = os.Rename(old, exe)
 		t.Fatalf("rename tmp to exe: %v", err)
 	}
 
@@ -70,7 +70,7 @@ func TestApplyUpdateRollback(t *testing.T) {
 	dir := t.TempDir()
 	exe := filepath.Join(dir, "monibright.exe")
 
-	os.WriteFile(exe, []byte("old"), 0o755)
+	_ = os.WriteFile(exe, []byte("old"), 0o755)
 
 	// No .tmp file exists — rename should fail and restore original.
 	old := exe + ".old"
@@ -81,7 +81,7 @@ func TestApplyUpdateRollback(t *testing.T) {
 	}
 	if err := os.Rename(tmp, exe); err != nil {
 		// Rollback.
-		os.Rename(old, exe)
+		_ = os.Rename(old, exe)
 	}
 
 	got, _ := os.ReadFile(exe)
