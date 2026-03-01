@@ -32,6 +32,9 @@ var (
 var modComctl32 = syscall.NewLazyDLL("comctl32.dll")
 var procInitCommonControlsEx = modComctl32.NewProc("InitCommonControlsEx")
 
+var modShell32 = syscall.NewLazyDLL("shell32.dll")
+var procSHAppBarMessage = modShell32.NewProc("SHAppBarMessage")
+
 var modGdi32 = syscall.NewLazyDLL("gdi32.dll")
 var (
 	procCreateSolidBrush = modGdi32.NewProc("CreateSolidBrush")
@@ -97,6 +100,18 @@ var (
 )
 
 type sliderPoint struct{ X, Y int32 }
+type sliderRect struct{ Left, Top, Right, Bottom int32 }
+
+type appBarData struct {
+	CbSize           uint32
+	HWND             uintptr
+	UCallbackMessage uint32
+	UEdge            uint32
+	Rc               sliderRect
+	LParam           int32
+}
+
+const ABM_GETTASKBARPOS = 5
 
 type wndClassExW struct {
 	CbSize        uint32
@@ -271,27 +286,63 @@ func positionAndShow(hwnd uintptr, cursorX, cursorY int32) {
 	procSendMessageW.Call(sliderTrackHWND, TBM_SETPOS, 1, uintptr(cur))
 	updatePctLabel(int(cur))
 
-	x := cursorX - 130
-	y := cursorY - 72 - 8
+	const winW, winH int32 = 260, 72
+	const gap int32 = 4
 
+	// Get taskbar position to anchor the slider above it (like volume flyout).
+	abd := appBarData{CbSize: uint32(unsafe.Sizeof(appBarData{}))}
+	ret, _, _ := procSHAppBarMessage.Call(ABM_GETTASKBARPOS, uintptr(unsafe.Pointer(&abd)))
+
+	var x, y int32
+	if ret != 0 {
+		tbRC := abd.Rc
+		tbH := tbRC.Bottom - tbRC.Top
+		tbW := tbRC.Right - tbRC.Left
+		if tbH < tbW {
+			// Horizontal taskbar (bottom or top).
+			x = cursorX - winW/2
+			if tbRC.Top == 0 {
+				// Top taskbar.
+				y = tbRC.Bottom + gap
+			} else {
+				// Bottom taskbar.
+				y = tbRC.Top - winH - gap
+			}
+		} else {
+			// Vertical taskbar (left or right).
+			y = cursorY - winH/2
+			if tbRC.Left == 0 {
+				// Left taskbar.
+				x = tbRC.Right + gap
+			} else {
+				// Right taskbar.
+				x = tbRC.Left - winW - gap
+			}
+		}
+	} else {
+		// Fallback: position above cursor.
+		x = cursorX - winW/2
+		y = cursorY - winH - gap
+	}
+
+	// Clamp to screen.
 	sw, _, _ := procGetSystemMetrics.Call(SM_CXSCREEN)
 	sh, _, _ := procGetSystemMetrics.Call(SM_CYSCREEN)
 	screenW, screenH := int32(sw), int32(sh)
-
 	if x < 0 {
 		x = 0
 	}
-	if x+260 > screenW {
-		x = screenW - 260
+	if x+winW > screenW {
+		x = screenW - winW
 	}
 	if y < 0 {
 		y = 0
 	}
-	if y+72 > screenH {
-		y = screenH - 72
+	if y+winH > screenH {
+		y = screenH - winH
 	}
 
-	procMoveWindow.Call(hwnd, uintptr(x), uintptr(y), 260, 72, 1)
+	procMoveWindow.Call(hwnd, uintptr(x), uintptr(y), uintptr(winW), uintptr(winH), 1)
 	procSetForegroundWindow.Call(hwnd)
 	procShowWindow.Call(hwnd, SW_SHOW)
 }
