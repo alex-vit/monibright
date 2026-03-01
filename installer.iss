@@ -18,7 +18,6 @@ SetupIconFile=icon\brightness.ico
 UninstallDisplayIcon={app}\monibright.exe
 Compression=lzma2
 SolidCompression=yes
-AppMutex=MoniBrightMutex
 CloseApplications=yes
 WizardStyle=modern
 
