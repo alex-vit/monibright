@@ -57,9 +57,10 @@ const (
 	WM_DESTROY  = 0x0002
 	WM_HSCROLL  = 0x0114
 
-	WM_APP        = 0x8000
-	wmShowSlider  = WM_APP + 1
-	wmSyncSlider  = WM_APP + 2
+	WM_APP            = 0x8000
+	wmShowSlider      = WM_APP + 1
+	wmSyncSlider      = WM_APP + 2
+	wmSyncColorTemp   = WM_APP + 3
 
 	WA_INACTIVE = 0
 
@@ -97,6 +98,12 @@ var (
 	brightnessReqs  = make(chan int, 1)
 	sliderBgBrush   uintptr
 	sliderDragging  bool
+
+	tempTrackHWND    uintptr
+	tempValueHWND    uintptr
+	colorTempReqs    = make(chan int, 1)
+	tempDragging     bool
+	currentColorTemp = 6500
 )
 
 type sliderPoint struct{ X, Y int32 }
@@ -167,7 +174,7 @@ func runSlider() {
 		uintptr(unsafe.Pointer(empty)),
 		WS_POPUP|WS_BORDER,
 		uintptr(offScreen), uintptr(offScreen),
-		260, 72,
+		260, 130,
 		0, 0, hInst, 0,
 	)
 	if sliderHWND == 0 {
@@ -176,31 +183,30 @@ func runSlider() {
 	}
 
 	staticClass, _ := syscall.UTF16PtrFromString("STATIC")
-	brightnessLabel, _ := syscall.UTF16PtrFromString("Brightness")
 	trackbarClass, _ := syscall.UTF16PtrFromString("msctls_trackbar32")
 
-	// "Brightness" label
+	// --- Color temperature row (top) ---
+	colorTempLabel, _ := syscall.UTF16PtrFromString("Color temp")
 	procCreateWindowExW.Call(
 		0,
 		uintptr(unsafe.Pointer(staticClass)),
-		uintptr(unsafe.Pointer(brightnessLabel)),
+		uintptr(unsafe.Pointer(colorTempLabel)),
 		WS_CHILD|WS_VISIBLE,
 		8, 8, 120, 16,
 		sliderHWND, 0, hInst, 0,
 	)
 
-	// Percentage label (right-aligned)
-	sliderPctHWND, _, _ = procCreateWindowExW.Call(
+	initTempText, _ := syscall.UTF16PtrFromString("6500K")
+	tempValueHWND, _, _ = procCreateWindowExW.Call(
 		0,
 		uintptr(unsafe.Pointer(staticClass)),
-		uintptr(unsafe.Pointer(empty)),
+		uintptr(unsafe.Pointer(initTempText)),
 		WS_CHILD|WS_VISIBLE|SS_RIGHT,
 		190, 8, 62, 16,
 		sliderHWND, 0, hInst, 0,
 	)
 
-	// Trackbar
-	sliderTrackHWND, _, _ = procCreateWindowExW.Call(
+	tempTrackHWND, _, _ = procCreateWindowExW.Call(
 		0,
 		uintptr(unsafe.Pointer(trackbarClass)),
 		uintptr(unsafe.Pointer(empty)),
@@ -209,14 +215,55 @@ func runSlider() {
 		sliderHWND, 0, hInst, 0,
 	)
 
-	// Set trackbar range 0–100, page size 10 (click-track jumps by 10)
+	// Range 2700–6500, page size 500, initial position 6500
+	procSendMessageW.Call(tempTrackHWND, TBM_SETRANGE, 1, uintptr(6500<<16|2700))
+	procSendMessageW.Call(tempTrackHWND, TBM_SETPAGESIZE, 0, 500)
+	procSendMessageW.Call(tempTrackHWND, TBM_SETPOS, 1, 6500)
+
+	// --- Brightness row (bottom) ---
+	brightnessLabel, _ := syscall.UTF16PtrFromString("Brightness")
+	procCreateWindowExW.Call(
+		0,
+		uintptr(unsafe.Pointer(staticClass)),
+		uintptr(unsafe.Pointer(brightnessLabel)),
+		WS_CHILD|WS_VISIBLE,
+		8, 66, 120, 16,
+		sliderHWND, 0, hInst, 0,
+	)
+
+	sliderPctHWND, _, _ = procCreateWindowExW.Call(
+		0,
+		uintptr(unsafe.Pointer(staticClass)),
+		uintptr(unsafe.Pointer(empty)),
+		WS_CHILD|WS_VISIBLE|SS_RIGHT,
+		190, 66, 62, 16,
+		sliderHWND, 0, hInst, 0,
+	)
+
+	sliderTrackHWND, _, _ = procCreateWindowExW.Call(
+		0,
+		uintptr(unsafe.Pointer(trackbarClass)),
+		uintptr(unsafe.Pointer(empty)),
+		WS_CHILD|WS_VISIBLE|TBS_HORZ|TBS_NOTICKS,
+		8, 86, 244, 30,
+		sliderHWND, 0, hInst, 0,
+	)
+
+	// Range 0–100, page size 10
 	procSendMessageW.Call(sliderTrackHWND, TBM_SETRANGE, 1, 100<<16)
 	procSendMessageW.Call(sliderTrackHWND, TBM_SETPAGESIZE, 0, 10)
 
-	// Async brightness updater — latest value wins, WndProc never blocks on DDC/CI
+	// Async brightness updater
 	go func() {
 		for level := range brightnessReqs {
 			setBrightness(level)
+		}
+	}()
+
+	// Async color temp updater
+	go func() {
+		for kelvin := range colorTempReqs {
+			applyColorTemp(kelvin)
 		}
 	}()
 
@@ -241,6 +288,12 @@ func sliderWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 			updatePctLabel(int(wParam))
 		}
 		return 0
+	case wmSyncColorTemp:
+		if !tempDragging {
+			procSendMessageW.Call(tempTrackHWND, TBM_SETPOS, 1, wParam)
+			updateTempLabel(int(wParam))
+		}
+		return 0
 	case wmShowSlider:
 		cursorX := int32(int16(lParam & 0xFFFF))
 		cursorY := int32(int16((lParam >> 16) & 0xFFFF))
@@ -256,16 +309,32 @@ func sliderWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 		}
 		return 0
 	case WM_HSCROLL:
-		pos, _, _ := procSendMessageW.Call(sliderTrackHWND, TBM_GETPOS, 0, 0)
-		updatePctLabel(int(pos))
-		code := wParam & 0xFFFF
-		switch code {
-		case SB_THUMBTRACK:
-			sliderDragging = true
-			requestBrightness(int(pos))
-		case SB_ENDSCROLL:
-			sliderDragging = false
-			requestBrightness(int(pos))
+		// Distinguish trackbars by lParam (child HWND).
+		switch lParam {
+		case tempTrackHWND:
+			pos, _, _ := procSendMessageW.Call(tempTrackHWND, TBM_GETPOS, 0, 0)
+			updateTempLabel(int(pos))
+			code := wParam & 0xFFFF
+			switch code {
+			case SB_THUMBTRACK:
+				tempDragging = true
+				requestColorTemp(int(pos))
+			case SB_ENDSCROLL:
+				tempDragging = false
+				requestColorTemp(int(pos))
+			}
+		default:
+			pos, _, _ := procSendMessageW.Call(sliderTrackHWND, TBM_GETPOS, 0, 0)
+			updatePctLabel(int(pos))
+			code := wParam & 0xFFFF
+			switch code {
+			case SB_THUMBTRACK:
+				sliderDragging = true
+				requestBrightness(int(pos))
+			case SB_ENDSCROLL:
+				sliderDragging = false
+				requestBrightness(int(pos))
+			}
 		}
 		return 0
 	case WM_DESTROY:
@@ -286,7 +355,11 @@ func positionAndShow(hwnd uintptr, cursorX, cursorY int32) {
 	procSendMessageW.Call(sliderTrackHWND, TBM_SETPOS, 1, uintptr(cur))
 	updatePctLabel(int(cur))
 
-	const winW, winH int32 = 260, 72
+	// Sync color temp trackbar to current value.
+	procSendMessageW.Call(tempTrackHWND, TBM_SETPOS, 1, uintptr(currentColorTemp))
+	updateTempLabel(currentColorTemp)
+
+	const winW, winH int32 = 260, 130
 	const gap int32 = 4
 
 	// Get taskbar position to anchor the slider above it (like volume flyout).
@@ -381,4 +454,20 @@ func showSlider() {
 	procGetCursorPos.Call(uintptr(unsafe.Pointer(&pt)))
 	lp := uintptr(uint16(pt.X)) | uintptr(uint16(pt.Y))<<16
 	procPostMessageW.Call(sliderHWND, wmShowSlider, 0, lp)
+}
+
+func updateTempLabel(kelvin int) {
+	text, _ := syscall.UTF16PtrFromString(fmt.Sprintf("%dK", kelvin))
+	procSetWindowTextW.Call(tempValueHWND, uintptr(unsafe.Pointer(text)))
+}
+
+// requestColorTemp enqueues a color temperature update, dropping any pending
+// value so the goroutine always processes the latest position.
+func requestColorTemp(kelvin int) {
+	currentColorTemp = kelvin
+	select {
+	case <-colorTempReqs:
+	default:
+	}
+	colorTempReqs <- kelvin
 }

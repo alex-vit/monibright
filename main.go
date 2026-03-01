@@ -64,7 +64,8 @@ func main() {
 
 	cleanOldBinary()
 
-	systray.Run(onReady, nil)
+	saveGammaRamp()
+	systray.Run(onReady, func() { restoreGammaRamp() })
 }
 
 func onReady() {
