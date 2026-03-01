@@ -1,17 +1,20 @@
 # MoniBright
 
-Windows system tray app for monitor brightness control via DDC/CI.
+Windows system tray app for monitor brightness and color temperature control via DDC/CI.
 
 [Download v1.4.0](https://github.com/alex-vit/monibright/releases/tag/v1.4.0) — **monibright-setup.exe** (installer) or **monibright.exe** (portable)
 
-<img width="264" height="429" alt="Screenshot (16)" src="https://github.com/user-attachments/assets/1d280d0f-e689-46db-9dda-da2eb86e13bc" />
+<!-- SCREENSHOT -->
 
 ## Features
 
-- Brightness presets (10%–100%) from the system tray
-- Global hotkeys: <kbd>Win+Numpad1</kbd> (10%) through <kbd>Win+Numpad0</kbd> (100%)
-- Start with Windows option
-- Installer with Start Menu shortcut and optional auto-start, or single portable executable
+- **Brightness slider** — left-click the tray icon for a popup slider, right-click for preset menu (10%–100%)
+- **Color temperature** — adjustable warm shift from 3500K to 6500K via the slider
+- **Auto color temperature** — f.lux-style automatic warm shift based on sunrise/sunset at your location
+- **Global hotkeys** — <kbd>Win+Numpad1</kbd> (10%) through <kbd>Win+Numpad0</kbd> (100%)
+- **Dynamic tray icon** — reflects current brightness level
+- **Self-update** — checks for new releases on startup
+- **Start with Windows** — optional autostart via installer or tray menu toggle
 
 ## Build
 
