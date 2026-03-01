@@ -22,8 +22,13 @@ Goal: reduce dependency surface by reimplementing thin wrappers ourselves.
 
 ```
 main.go              # app entry point, tray menu, brightness control
-debug.go / release.go # build-tag controlled const debug bool
+config.go            # JSON config load/save (%LocalAppData%\MoniBright\config.json)
+autocolor.go         # auto color temp: location, sun schedule, interpolation, ticker
+gamma.go             # gamma ramp API: kelvinToRGB, applyColorTemp, save/restore
+slider.go            # Win32 popup slider (brightness + color temp trackbars)
 hotkey.go            # own RegisterHotKey wrapper (inspired by golang.design/x/hotkey)
+update.go            # self-update via GitHub releases
+debug.go / release.go # build-tag controlled const debug bool
 icon/                # embedded tray icon (yellow circle); go generate ./icon regenerates .ico
 notes/               # development notes (YYYY-MM-DD-<slug>.md per task)
 ```

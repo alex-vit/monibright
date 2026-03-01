@@ -7,6 +7,7 @@ import (
 	"log"
 	"runtime"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -78,15 +79,25 @@ const (
 	SM_CXSCREEN = 0
 	SM_CYSCREEN = 1
 
-	SS_RIGHT = 0x0002
+	SS_RIGHT  = 0x0002
+	SS_NOTIFY = 0x0100
+
+	WM_COMMAND = 0x0111
 
 	ICC_BAR_CLASSES = 0x00000004
 
 	WM_CTLCOLORSTATIC = 0x0138
 
+	wmSyncAutoToggle = WM_APP + 4
+
+	WM_POWERBROADCAST      = 0x0218
+	PBT_APMRESUMEAUTOMATIC = 0x0012
+
 	// Win32 colors are 0x00BBGGRR
 	sliderBgColor   = 0x00202020 // #202020 dark panel
 	sliderTextColor = 0x00DEDEDE // #DEDEDE light text
+	autoOffColor    = 0x00888888 // #888888 dimmed gray
+	autoOnColor     = 0x004EA5FF // #FFA54E warm amber (BGR)
 )
 
 var (
@@ -101,9 +112,12 @@ var (
 
 	tempTrackHWND    uintptr
 	tempValueHWND    uintptr
+	autoToggleHWND   uintptr
 	colorTempReqs    = make(chan int, 1)
 	tempDragging     bool
 	currentColorTemp = 6500
+	lastManualTemp   = 6500
+	animateStop      chan struct{}
 )
 
 type sliderPoint struct{ X, Y int32 }
@@ -186,13 +200,23 @@ func runSlider() {
 	trackbarClass, _ := syscall.UTF16PtrFromString("msctls_trackbar32")
 
 	// --- Color temperature row (top) ---
-	colorTempLabel, _ := syscall.UTF16PtrFromString("Color temp")
+	colorTempLabel, _ := syscall.UTF16PtrFromString("Temperature")
 	procCreateWindowExW.Call(
 		0,
 		uintptr(unsafe.Pointer(staticClass)),
 		uintptr(unsafe.Pointer(colorTempLabel)),
 		WS_CHILD|WS_VISIBLE,
-		8, 8, 120, 16,
+		8, 8, 85, 16,
+		sliderHWND, 0, hInst, 0,
+	)
+
+	autoToggleText, _ := syscall.UTF16PtrFromString("Auto")
+	autoToggleHWND, _, _ = procCreateWindowExW.Call(
+		0,
+		uintptr(unsafe.Pointer(staticClass)),
+		uintptr(unsafe.Pointer(autoToggleText)),
+		WS_CHILD|WS_VISIBLE|SS_RIGHT|SS_NOTIFY,
+		95, 8, 80, 16,
 		sliderHWND, 0, hInst, 0,
 	)
 
@@ -202,7 +226,7 @@ func runSlider() {
 		uintptr(unsafe.Pointer(staticClass)),
 		uintptr(unsafe.Pointer(initTempText)),
 		WS_CHILD|WS_VISIBLE|SS_RIGHT,
-		190, 8, 62, 16,
+		192, 8, 60, 16,
 		sliderHWND, 0, hInst, 0,
 	)
 
@@ -215,8 +239,8 @@ func runSlider() {
 		sliderHWND, 0, hInst, 0,
 	)
 
-	// Range 2700–6500, page size 500, initial position 6500
-	procSendMessageW.Call(tempTrackHWND, TBM_SETRANGE, 1, uintptr(6500<<16|2700))
+	// Range 3500–6500, page size 500, initial position 6500
+	procSendMessageW.Call(tempTrackHWND, TBM_SETRANGE, 1, uintptr(6500<<16|3500))
 	procSendMessageW.Call(tempTrackHWND, TBM_SETPAGESIZE, 0, 500)
 	procSendMessageW.Call(tempTrackHWND, TBM_SETPOS, 1, 6500)
 
@@ -294,12 +318,29 @@ func sliderWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 			updateTempLabel(int(wParam))
 		}
 		return 0
+	case wmSyncAutoToggle:
+		updateAutoToggleText()
+		return 0
 	case wmShowSlider:
 		cursorX := int32(int16(lParam & 0xFFFF))
 		cursorY := int32(int16((lParam >> 16) & 0xFFFF))
 		positionAndShow(hwnd, cursorX, cursorY)
 		return 0
+	case WM_COMMAND:
+		if lParam == autoToggleHWND {
+			handleAutoToggleClick()
+		}
+		return 0
 	case WM_CTLCOLORSTATIC:
+		if lParam == autoToggleHWND {
+			if autoColorActive {
+				procSetTextColor.Call(wParam, autoOnColor)
+			} else {
+				procSetTextColor.Call(wParam, autoOffColor)
+			}
+			procSetBkColor.Call(wParam, sliderBgColor)
+			return sliderBgBrush
+		}
 		procSetTextColor.Call(wParam, sliderTextColor)
 		procSetBkColor.Call(wParam, sliderBgColor)
 		return sliderBgBrush
@@ -318,9 +359,21 @@ func sliderWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 			switch code {
 			case SB_THUMBTRACK:
 				tempDragging = true
+				lastManualTemp = int(pos)
+				stopAnimation()
+				if autoColorActive {
+					stopAutoColor()
+					cfg.AutoColorEnabled = false
+					saveConfig()
+					updateAutoToggleText()
+					log.Printf("auto color temp disabled (manual override)")
+				}
 				requestColorTemp(int(pos))
 			case SB_ENDSCROLL:
 				tempDragging = false
+				lastManualTemp = int(pos)
+				cfg.ManualTemp = int(pos)
+				saveConfig()
 				requestColorTemp(int(pos))
 			}
 		default:
@@ -337,6 +390,12 @@ func sliderWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 			}
 		}
 		return 0
+	case WM_POWERBROADCAST:
+		if wParam == PBT_APMRESUMEAUTOMATIC {
+			log.Printf("wake detected, reapplying color temp %dK", currentColorTemp)
+			go applyColorTemp(currentColorTemp)
+		}
+		return 1
 	case WM_DESTROY:
 		procPostQuitMessage.Call(0)
 		return 0
@@ -358,6 +417,7 @@ func positionAndShow(hwnd uintptr, cursorX, cursorY int32) {
 	// Sync color temp trackbar to current value.
 	procSendMessageW.Call(tempTrackHWND, TBM_SETPOS, 1, uintptr(currentColorTemp))
 	updateTempLabel(currentColorTemp)
+	updateAutoToggleText()
 
 	const winW, winH int32 = 260, 130
 	const gap int32 = 4
@@ -470,4 +530,95 @@ func requestColorTemp(kelvin int) {
 	default:
 	}
 	colorTempReqs <- kelvin
+}
+
+func updateAutoToggleText() {
+	var label string
+	if autoColorActive {
+		label = "\u25CF Auto"
+	} else {
+		label = "Auto"
+	}
+	text, _ := syscall.UTF16PtrFromString(label)
+	procSetWindowTextW.Call(autoToggleHWND, uintptr(unsafe.Pointer(text)))
+}
+
+func handleAutoToggleClick() {
+	if autoColorActive {
+		from := currentColorTemp
+		stopAutoColor()
+		cfg.AutoColorEnabled = false
+		saveConfig()
+		updateAutoToggleText()
+		animateColorTemp(from, lastManualTemp)
+	} else {
+		stopAnimation()
+		from := currentColorTemp
+		cfg.AutoColorEnabled = true
+		saveConfig()
+		updateAutoToggleText()
+		go func() {
+			startAutoColor(from)
+			procPostMessageW.Call(sliderHWND, wmSyncAutoToggle, 0, 0)
+		}()
+	}
+}
+
+func stopAnimation() {
+	if animateStop != nil {
+		close(animateStop)
+		animateStop = nil
+	}
+}
+
+// animateColorTemp starts a non-blocking animated transition (for disable path).
+func animateColorTemp(from, to int) {
+	stopAnimation()
+	stop := make(chan struct{})
+	animateStop = stop
+	go func() {
+		animateColorTempSync(from, to, stop)
+	}()
+}
+
+// animateColorTempSync runs an eased color temp transition, blocking until
+// complete or the stop channel is closed. Duration scales with distance:
+// full range (3000K) = 1s, smaller distances proportionally less.
+func animateColorTempSync(from, to int, stop <-chan struct{}) {
+	const frameDur = 20 * time.Millisecond
+	const maxFrames = 50  // 1s at full range
+	const minFrames = 5
+	const fullRange = 3000 // 6500 - 3500
+
+	dist := from - to
+	if dist < 0 {
+		dist = -dist
+	}
+	frames := maxFrames * dist / fullRange
+	if frames < minFrames {
+		frames = minFrames
+	}
+	for i := 1; i <= frames; i++ {
+		select {
+		case <-stop:
+			return
+		default:
+		}
+		t := float64(i) / float64(frames)
+		e := easeInOutCubic(t)
+		temp := from + int(e*float64(to-from))
+		requestColorTemp(temp)
+		syncColorTempSlider(temp)
+		time.Sleep(frameDur)
+	}
+	requestColorTemp(to)
+	syncColorTempSlider(to)
+}
+
+func easeInOutCubic(t float64) float64 {
+	if t < 0.5 {
+		return 4 * t * t * t
+	}
+	u := -2*t + 2
+	return 1 - u*u*u/2
 }

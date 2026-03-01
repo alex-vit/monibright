@@ -23,6 +23,7 @@ var procCreateMutexW = kernel32.NewProc("CreateMutexW")
 var version = ""
 
 var logPath string
+var dataDir string
 
 const (
 	VKNumpad0    = 0x60
@@ -33,7 +34,7 @@ const (
 var (
 	allMonitors []*ddcci.PhysicalMonitor
 	brightItems map[int]*systray.MenuItem
-	mAutostart  *systray.MenuItem
+	mAutostart *systray.MenuItem
 )
 
 type isoLogWriter struct{ w io.Writer }
@@ -54,7 +55,7 @@ func main() {
 	procCreateMutexW.Call(0, 0, uintptr(unsafe.Pointer(name)))
 
 	log.SetFlags(0)
-	dataDir := filepath.Join(os.Getenv("LocalAppData"), "MoniBright")
+	dataDir = filepath.Join(os.Getenv("LocalAppData"), "MoniBright")
 	os.MkdirAll(dataDir, 0o755)
 	logPath = filepath.Join(dataDir, "log.txt")
 	if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
@@ -64,6 +65,7 @@ func main() {
 
 	cleanOldBinary()
 
+	loadConfig()
 	saveGammaRamp()
 	systray.Run(onReady, func() { restoreGammaRamp() })
 }
@@ -160,6 +162,15 @@ func onReady() {
 			log.Printf("hotkey registration error: %v", err)
 		}
 	}()
+
+	lastManualTemp = cfg.ManualTemp
+	currentColorTemp = cfg.ManualTemp
+	if cfg.AutoColorEnabled {
+		go startAutoColor(0)
+	} else if cfg.ManualTemp != 6500 {
+		applyColorTemp(cfg.ManualTemp)
+		syncColorTempSlider(cfg.ManualTemp)
+	}
 }
 
 func updateIcon(level int) {
