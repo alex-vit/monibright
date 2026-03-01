@@ -405,6 +405,54 @@ func sliderWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 	}
 }
 
+// sliderPosition computes the popup position given cursor coordinates,
+// an optional taskbar rect, and screen dimensions.
+func sliderPosition(cursorX, cursorY int32, taskbar *sliderRect, screenW, screenH int32) (x, y int32) {
+	const winW, winH int32 = 260, 130
+	const gap int32 = 4
+
+	if taskbar != nil {
+		tbH := taskbar.Bottom - taskbar.Top
+		tbW := taskbar.Right - taskbar.Left
+		if tbH < tbW {
+			// Horizontal taskbar (bottom or top).
+			x = cursorX - winW/2
+			if taskbar.Top == 0 {
+				y = taskbar.Bottom + gap
+			} else {
+				y = taskbar.Top - winH - gap
+			}
+		} else {
+			// Vertical taskbar (left or right).
+			y = cursorY - winH/2
+			if taskbar.Left == 0 {
+				x = taskbar.Right + gap
+			} else {
+				x = taskbar.Left - winW - gap
+			}
+		}
+	} else {
+		// Fallback: position above cursor.
+		x = cursorX - winW/2
+		y = cursorY - winH - gap
+	}
+
+	// Clamp to screen.
+	if x < 0 {
+		x = 0
+	}
+	if x+winW > screenW {
+		x = screenW - winW
+	}
+	if y < 0 {
+		y = 0
+	}
+	if y+winH > screenH {
+		y = screenH - winH
+	}
+	return
+}
+
 func positionAndShow(hwnd uintptr, cursorX, cursorY int32) {
 	_, cur, _, err := allMonitors[0].GetBrightness()
 	if err != nil {
@@ -419,63 +467,20 @@ func positionAndShow(hwnd uintptr, cursorX, cursorY int32) {
 	updateTempLabel(currentColorTemp)
 	updateAutoToggleText()
 
-	const winW, winH int32 = 260, 130
-	const gap int32 = 4
-
 	// Get taskbar position to anchor the slider above it (like volume flyout).
 	abd := appBarData{CbSize: uint32(unsafe.Sizeof(appBarData{}))}
 	ret, _, _ := procSHAppBarMessage.Call(ABM_GETTASKBARPOS, uintptr(unsafe.Pointer(&abd)))
 
-	var x, y int32
+	var taskbar *sliderRect
 	if ret != 0 {
-		tbRC := abd.Rc
-		tbH := tbRC.Bottom - tbRC.Top
-		tbW := tbRC.Right - tbRC.Left
-		if tbH < tbW {
-			// Horizontal taskbar (bottom or top).
-			x = cursorX - winW/2
-			if tbRC.Top == 0 {
-				// Top taskbar.
-				y = tbRC.Bottom + gap
-			} else {
-				// Bottom taskbar.
-				y = tbRC.Top - winH - gap
-			}
-		} else {
-			// Vertical taskbar (left or right).
-			y = cursorY - winH/2
-			if tbRC.Left == 0 {
-				// Left taskbar.
-				x = tbRC.Right + gap
-			} else {
-				// Right taskbar.
-				x = tbRC.Left - winW - gap
-			}
-		}
-	} else {
-		// Fallback: position above cursor.
-		x = cursorX - winW/2
-		y = cursorY - winH - gap
+		taskbar = &abd.Rc
 	}
 
-	// Clamp to screen.
 	sw, _, _ := procGetSystemMetrics.Call(SM_CXSCREEN)
 	sh, _, _ := procGetSystemMetrics.Call(SM_CYSCREEN)
-	screenW, screenH := int32(sw), int32(sh)
-	if x < 0 {
-		x = 0
-	}
-	if x+winW > screenW {
-		x = screenW - winW
-	}
-	if y < 0 {
-		y = 0
-	}
-	if y+winH > screenH {
-		y = screenH - winH
-	}
+	x, y := sliderPosition(cursorX, cursorY, taskbar, int32(sw), int32(sh))
 
-	procMoveWindow.Call(hwnd, uintptr(x), uintptr(y), uintptr(winW), uintptr(winH), 1)
+	procMoveWindow.Call(hwnd, uintptr(x), uintptr(y), 260, 130, 1)
 	procSetForegroundWindow.Call(hwnd)
 	procShowWindow.Call(hwnd, SW_SHOW)
 }
@@ -581,14 +586,12 @@ func animateColorTemp(from, to int) {
 	}()
 }
 
-// animateColorTempSync runs an eased color temp transition, blocking until
-// complete or the stop channel is closed. Duration scales with distance:
-// full range (3000K) = 1s, smaller distances proportionally less.
-func animateColorTempSync(from, to int, stop <-chan struct{}) {
-	const frameDur = 20 * time.Millisecond
-	const maxFrames = 50  // 1s at full range
+// animationFrames computes the number of transition frames for a color temp
+// change from one value to another.
+func animationFrames(from, to int) int {
+	const maxFrames = 50
 	const minFrames = 5
-	const fullRange = 3000 // 6500 - 3500
+	const fullRange = 3000
 
 	dist := from - to
 	if dist < 0 {
@@ -598,6 +601,16 @@ func animateColorTempSync(from, to int, stop <-chan struct{}) {
 	if frames < minFrames {
 		frames = minFrames
 	}
+	return frames
+}
+
+// animateColorTempSync runs an eased color temp transition, blocking until
+// complete or the stop channel is closed. Duration scales with distance:
+// full range (3000K) = 1s, smaller distances proportionally less.
+func animateColorTempSync(from, to int, stop <-chan struct{}) {
+	const frameDur = 20 * time.Millisecond
+
+	frames := animationFrames(from, to)
 	for i := 1; i <= frames; i++ {
 		select {
 		case <-stop:

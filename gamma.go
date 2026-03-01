@@ -56,11 +56,10 @@ func kelvinToRGB(kelvin int) (r, g, b float64) {
 	return
 }
 
-// applyColorTemp builds a gamma ramp scaled by the RGB multipliers for the
-// given color temperature and applies it via SetDeviceGammaRamp.
-func applyColorTemp(kelvin int) {
+// buildGammaRamp constructs a gamma ramp scaled by the RGB multipliers for
+// the given color temperature.
+func buildGammaRamp(kelvin int) gammaRamp {
 	r, g, b := kelvinToRGB(kelvin)
-
 	var ramp gammaRamp
 	for i := 0; i < 256; i++ {
 		val := uint16(i) << 8
@@ -68,6 +67,13 @@ func applyColorTemp(kelvin int) {
 		ramp[1][i] = uint16(float64(val) * g)
 		ramp[2][i] = uint16(float64(val) * b)
 	}
+	return ramp
+}
+
+// applyColorTemp builds a gamma ramp scaled by the RGB multipliers for the
+// given color temperature and applies it via SetDeviceGammaRamp.
+func applyColorTemp(kelvin int) {
+	ramp := buildGammaRamp(kelvin)
 
 	hdc, _, _ := procGetDC.Call(0)
 	if hdc == 0 {

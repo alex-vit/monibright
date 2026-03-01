@@ -285,10 +285,13 @@ func toggleAutostart() {
 	}
 }
 
+// nearestPreset rounds a brightness level to the nearest 10% preset (10–100).
+func nearestPreset(level int) int {
+	return max(((level+5)/10)*10, 10)
+}
+
 func checkItem(items map[int]*systray.MenuItem, level int) {
-	// Round to nearest preset (10, 20, ..., 100) so non-preset values
-	// (e.g. 75% set via monitor buttons) still show a checkmark.
-	nearest := max(((level+5)/10)*10, 10)
+	nearest := nearestPreset(level)
 	for l, item := range items {
 		if l == nearest {
 			item.Check()
