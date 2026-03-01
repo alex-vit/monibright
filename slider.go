@@ -32,6 +32,13 @@ var (
 var modComctl32 = syscall.NewLazyDLL("comctl32.dll")
 var procInitCommonControlsEx = modComctl32.NewProc("InitCommonControlsEx")
 
+var modGdi32 = syscall.NewLazyDLL("gdi32.dll")
+var (
+	procCreateSolidBrush = modGdi32.NewProc("CreateSolidBrush")
+	procSetBkColor       = modGdi32.NewProc("SetBkColor")
+	procSetTextColor     = modGdi32.NewProc("SetTextColor")
+)
+
 const (
 	WS_POPUP         = 0x80000000
 	WS_BORDER        = 0x00800000
@@ -47,8 +54,9 @@ const (
 	WM_DESTROY  = 0x0002
 	WM_HSCROLL  = 0x0114
 
-	WM_APP       = 0x8000
-	wmShowSlider = WM_APP + 1
+	WM_APP        = 0x8000
+	wmShowSlider  = WM_APP + 1
+	wmSyncSlider  = WM_APP + 2
 
 	WA_INACTIVE = 0
 
@@ -70,7 +78,11 @@ const (
 
 	ICC_BAR_CLASSES = 0x00000004
 
-	COLOR_BTNFACE = 15
+	WM_CTLCOLORSTATIC = 0x0138
+
+	// Win32 colors are 0x00BBGGRR
+	sliderBgColor   = 0x00202020 // #202020 dark panel
+	sliderTextColor = 0x00DEDEDE // #DEDEDE light text
 )
 
 var (
@@ -80,6 +92,8 @@ var (
 	sliderReady     = make(chan struct{})
 	sliderWndProcCB uintptr
 	brightnessReqs  = make(chan int, 1)
+	sliderBgBrush   uintptr
+	sliderDragging  bool
 )
 
 type sliderPoint struct{ X, Y int32 }
@@ -117,13 +131,14 @@ func runSlider() {
 	hCursor, _, _ := procLoadCursorW.Call(0, 32512) // IDC_ARROW
 
 	sliderWndProcCB = syscall.NewCallback(sliderWndProc)
+	sliderBgBrush, _, _ = procCreateSolidBrush.Call(sliderBgColor)
 
 	className, _ := syscall.UTF16PtrFromString("MoniBrightSlider")
 	wc := wndClassExW{
 		LpfnWndProc:   sliderWndProcCB,
 		HInstance:     hInst,
 		HCursor:       hCursor,
-		HbrBackground: COLOR_BTNFACE + 1,
+		HbrBackground: sliderBgBrush,
 		LpszClassName: className,
 	}
 	wc.CbSize = uint32(unsafe.Sizeof(wc))
@@ -205,11 +220,21 @@ func runSlider() {
 
 func sliderWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 	switch msg {
+	case wmSyncSlider:
+		if !sliderDragging {
+			procSendMessageW.Call(sliderTrackHWND, TBM_SETPOS, 1, wParam)
+			updatePctLabel(int(wParam))
+		}
+		return 0
 	case wmShowSlider:
 		cursorX := int32(int16(lParam & 0xFFFF))
 		cursorY := int32(int16((lParam >> 16) & 0xFFFF))
 		positionAndShow(hwnd, cursorX, cursorY)
 		return 0
+	case WM_CTLCOLORSTATIC:
+		procSetTextColor.Call(wParam, sliderTextColor)
+		procSetBkColor.Call(wParam, sliderBgColor)
+		return sliderBgBrush
 	case WM_ACTIVATE:
 		if wParam&0xFFFF == WA_INACTIVE {
 			procShowWindow.Call(hwnd, SW_HIDE)
@@ -219,7 +244,12 @@ func sliderWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 		pos, _, _ := procSendMessageW.Call(sliderTrackHWND, TBM_GETPOS, 0, 0)
 		updatePctLabel(int(pos))
 		code := wParam & 0xFFFF
-		if code == SB_THUMBTRACK || code == SB_ENDSCROLL {
+		switch code {
+		case SB_THUMBTRACK:
+			sliderDragging = true
+			requestBrightness(int(pos))
+		case SB_ENDSCROLL:
+			sliderDragging = false
 			requestBrightness(int(pos))
 		}
 		return 0
@@ -279,6 +309,19 @@ func requestBrightness(level int) {
 func updatePctLabel(pct int) {
 	text, _ := syscall.UTF16PtrFromString(fmt.Sprintf("%d%%", pct))
 	procSetWindowTextW.Call(sliderPctHWND, uintptr(unsafe.Pointer(text)))
+}
+
+// syncSlider posts the current brightness level to the slider window so it
+// updates while on screen. Safe to call from any goroutine.
+func syncSlider(level int) {
+	select {
+	case <-sliderReady:
+	default:
+		return // not yet initialized
+	}
+	if sliderHWND != 0 {
+		procPostMessageW.Call(sliderHWND, wmSyncSlider, uintptr(level), 0)
+	}
 }
 
 func showSlider() {

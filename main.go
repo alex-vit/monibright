@@ -249,6 +249,7 @@ func setBrightness(level int) {
 
 	checkItem(brightItems, level)
 	updateIcon(level)
+	syncSlider(level)
 }
 
 func showMenu(menu systray.IMenu) {
