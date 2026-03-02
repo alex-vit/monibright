@@ -273,9 +273,13 @@ func runSlider() {
 		sliderHWND, 0, hInst, 0,
 	)
 
-	// Range 0–100, page size 10
+	// Range 0–100, page size 10, initial position from monitor
 	procSendMessageW.Call(sliderTrackHWND, TBM_SETRANGE, 1, 100<<16) //nolint:errcheck
 	procSendMessageW.Call(sliderTrackHWND, TBM_SETPAGESIZE, 0, 10)   //nolint:errcheck
+	if _, cur, _, err := allMonitors[0].GetBrightness(); err == nil {
+		procSendMessageW.Call(sliderTrackHWND, TBM_SETPOS, 1, uintptr(cur)) //nolint:errcheck
+		updatePctLabel(cur)
+	}
 
 	// Async brightness updater
 	go func() {
@@ -392,8 +396,16 @@ func sliderWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 		return 0
 	case WM_POWERBROADCAST:
 		if wParam == PBT_APMRESUMEAUTOMATIC {
-			log.Printf("wake detected, reapplying color temp %dK", currentColorTemp)
-			go applyColorTemp(currentColorTemp)
+			log.Printf("wake detected")
+			if autoColorActive {
+				select {
+				case autoColorWake <- struct{}{}:
+				default:
+				}
+			} else {
+				log.Printf("wake: reapplying color temp %dK", currentColorTemp)
+				go applyColorTemp(currentColorTemp)
+			}
 		}
 		return 1
 	case WM_DESTROY:
@@ -458,6 +470,15 @@ func positionAndShow(hwnd uintptr, cursorX, cursorY int32) {
 	if err != nil {
 		log.Printf("slider: GetBrightness: %v", err)
 		cur = 50
+	}
+	if cur == 0 {
+		log.Printf("slider: brightness=0 suspicious, re-enumerating")
+		if refreshMonitors() {
+			if _, c, _, e := allMonitors[0].GetBrightness(); e == nil {
+				cur = c
+				log.Printf("slider: brightness retry: %d", cur)
+			}
+		}
 	}
 	procSendMessageW.Call(sliderTrackHWND, TBM_SETPOS, 1, uintptr(cur)) //nolint:errcheck
 	updatePctLabel(cur)

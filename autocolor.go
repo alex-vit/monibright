@@ -13,6 +13,7 @@ import (
 var (
 	autoColorActive bool
 	autoColorStop   chan struct{}
+	autoColorWake   chan struct{}
 	autoColorMu     sync.Mutex
 
 	cachedSched    sunSchedule
@@ -99,10 +100,10 @@ func fetchSunSchedule(lat, lon float64) (sunSchedule, error) {
 
 	var result struct {
 		Results struct {
-			Sunrise      string `json:"sunrise"`
-			Sunset       string `json:"sunset"`
-			CivilTwBegin string `json:"civil_twilight_begin"`
-			CivilTwEnd   string `json:"civil_twilight_end"`
+			Sunrise string `json:"sunrise"`
+			Sunset  string `json:"sunset"`
+			Dawn    string `json:"dawn"`
+			Dusk    string `json:"dusk"`
 		} `json:"results"`
 		Status string `json:"status"`
 	}
@@ -130,11 +131,11 @@ func fetchSunSchedule(lat, lon float64) (sunSchedule, error) {
 	if sched.Sunset, err = parse(result.Results.Sunset); err != nil {
 		return sunSchedule{}, fmt.Errorf("parse sunset: %w", err)
 	}
-	if sched.CivilTwBegin, err = parse(result.Results.CivilTwBegin); err != nil {
-		return sunSchedule{}, fmt.Errorf("parse civil_twilight_begin: %w", err)
+	if sched.CivilTwBegin, err = parse(result.Results.Dawn); err != nil {
+		return sunSchedule{}, fmt.Errorf("parse dawn: %w", err)
 	}
-	if sched.CivilTwEnd, err = parse(result.Results.CivilTwEnd); err != nil {
-		return sunSchedule{}, fmt.Errorf("parse civil_twilight_end: %w", err)
+	if sched.CivilTwEnd, err = parse(result.Results.Dusk); err != nil {
+		return sunSchedule{}, fmt.Errorf("parse dusk: %w", err)
 	}
 
 	return sched, nil
@@ -152,10 +153,30 @@ func defaultSunSchedule() sunSchedule {
 	}
 }
 
+// normalizeSched moves schedule times to the same date as now,
+// preserving the hour/minute/second. Prevents stale-date comparisons
+// when the schedule was fetched on a previous day.
+func normalizeSched(now time.Time, s sunSchedule) sunSchedule {
+	redate := func(t time.Time) time.Time {
+		return time.Date(now.Year(), now.Month(), now.Day(),
+			t.Hour(), t.Minute(), t.Second(), 0, now.Location())
+	}
+	return sunSchedule{
+		Sunrise:      redate(s.Sunrise),
+		Sunset:       redate(s.Sunset),
+		CivilTwBegin: redate(s.CivilTwBegin),
+		CivilTwEnd:   redate(s.CivilTwEnd),
+	}
+}
+
 // interpolateTemp computes the color temperature for the given time based on
 // the sun schedule, linearly blending between dayTemp and nightTemp during
 // twilight transitions.
 func interpolateTemp(now time.Time, sched sunSchedule, dayTemp, nightTemp int) int {
+	// Normalize schedule times to now's date to prevent stale-date bugs
+	// (e.g. schedule from yesterday causing permanent night after midnight).
+	sched = normalizeSched(now, sched)
+
 	// Evening ramp: sunset is the midpoint (~50% warm at sunset).
 	// eveningStart = 2*sunset - civilTwEnd  (≈30 min before sunset)
 	// eveningEnd   = civilTwEnd             (≈30 min after sunset)
@@ -201,6 +222,7 @@ func startAutoColor(animateFrom int) {
 	}
 
 	autoColorStop = make(chan struct{})
+	autoColorWake = make(chan struct{}, 1)
 	autoColorActive = true
 	go runAutoColor(autoColorStop, animateFrom)
 }
@@ -256,9 +278,10 @@ func runAutoColor(stop chan struct{}, animateFrom int) {
 			sched = freshSched
 			cachedSched = freshSched
 			cachedSchedDay = time.Now().YearDay()
-			log.Printf("autocolor: sunrise=%s sunset=%s tw_begin=%s tw_end=%s",
+			log.Printf("autocolor: sunrise=%s sunset=%s dawn=%s dusk=%s (sched date=%s)",
 				sched.Sunrise.Format("15:04"), sched.Sunset.Format("15:04"),
-				sched.CivilTwBegin.Format("15:04"), sched.CivilTwEnd.Format("15:04"))
+				sched.CivilTwBegin.Format("15:04"), sched.CivilTwEnd.Format("15:04"),
+				sched.Sunrise.Format("2006-01-02"))
 		}
 	}
 
@@ -280,20 +303,24 @@ func runAutoColor(stop chan struct{}, animateFrom int) {
 		if now.YearDay() != lastDate {
 			newSched, err := fetchSunSchedule(cfg.Latitude, cfg.Longitude)
 			if err != nil {
-				log.Printf("autocolor: schedule re-fetch failed: %v", err)
+				log.Printf("autocolor: schedule re-fetch failed: %v, using defaults", err)
+				sched = defaultSunSchedule()
 			} else {
 				sched = newSched
 				cachedSched = newSched
 				cachedSchedDay = now.YearDay()
-				log.Printf("autocolor: new day, sunrise=%s sunset=%s",
-					sched.Sunrise.Format("15:04"), sched.Sunset.Format("15:04"))
 			}
+			log.Printf("autocolor: new day, sunrise=%s sunset=%s dawn=%s dusk=%s (sched date=%s)",
+				sched.Sunrise.Format("15:04"), sched.Sunset.Format("15:04"),
+				sched.CivilTwBegin.Format("15:04"), sched.CivilTwEnd.Format("15:04"),
+				sched.Sunrise.Format("2006-01-02"))
 			lastDate = now.YearDay()
 		}
 
 		temp := interpolateTemp(now, sched, cfg.DayTemp, cfg.NightTemp)
 		if temp != lastTemp {
-			log.Printf("autocolor: %dK", temp)
+			log.Printf("autocolor: %dK → %dK (sched date=%s)",
+				lastTemp, temp, sched.Sunrise.Format("2006-01-02"))
 			requestColorTemp(temp)
 			syncColorTempSlider(temp)
 			lastTemp = temp
@@ -309,6 +336,9 @@ func runAutoColor(stop chan struct{}, animateFrom int) {
 			log.Printf("autocolor: stopped")
 			return
 		case <-ticker.C:
+			tick()
+		case <-autoColorWake:
+			log.Printf("autocolor: wake, recalculating")
 			tick()
 		}
 	}
