@@ -7,15 +7,22 @@ import (
 	"runtime"
 	"syscall"
 	"unsafe"
+
+	"github.com/alex-vit/monibright/icon"
 )
 
 var (
-	procGetStockObject  = modGdi32.NewProc("GetStockObject")
-	procEnableWindow    = user32.NewProc("EnableWindow")
-	procSetFocus        = user32.NewProc("SetFocus")
-	procIsWindow        = user32.NewProc("IsWindow")
-	procDestroyWindow   = user32.NewProc("DestroyWindow")
-	procIsWindowVisible = user32.NewProc("IsWindowVisible")
+	procGetStockObject            = modGdi32.NewProc("GetStockObject")
+	procEnableWindow              = user32.NewProc("EnableWindow")
+	procSetFocus                  = user32.NewProc("SetFocus")
+	procIsWindow                  = user32.NewProc("IsWindow")
+	procDestroyWindow             = user32.NewProc("DestroyWindow")
+	procIsWindowVisible           = user32.NewProc("IsWindowVisible")
+	procCreateIconFromResourceEx  = user32.NewProc("CreateIconFromResourceEx")
+	procGetWindowRect             = user32.NewProc("GetWindowRect")
+	procSetWindowPos              = user32.NewProc("SetWindowPos")
+	procSetWindowLongPtrW         = user32.NewProc("SetWindowLongPtrW")
+	procCallWindowProcW           = user32.NewProc("CallWindowProcW")
 )
 
 const (
@@ -61,6 +68,17 @@ const (
 	IDCANCEL = 2
 
 	WM_APP_SHOW_SETTINGS = WM_APP + 10
+
+	WM_NOTIFY      = 0x004E
+	UDN_DELTAPOS   = 0xFFFFFD2E // -722 as uint32
+	EN_KILLFOCUS   = 0x0200
+
+	WM_KEYDOWN   = 0x0100
+	WM_CHAR      = 0x0102
+	VK_TAB       = 0x09
+	VK_RETURN    = 0x0D
+	EM_SETSEL    = 0x00B1
+	GWLP_WNDPROC = ^uintptr(3) // -4
 )
 
 var (
@@ -75,8 +93,53 @@ var (
 	udDayTemp     uintptr
 	udNightTemp   uintptr
 	chkAutostart  uintptr
-	btnOK         uintptr
-	btnCancel     uintptr
+	btnOK             uintptr
+	btnCancel         uintptr
+	origDayEditProc   uintptr
+	origNightEditProc uintptr
+)
+
+type nmhdr struct {
+	HwndFrom uintptr
+	IdFrom   uintptr
+	Code     uint32
+	_        uint32 // padding
+}
+
+type nmUpDown struct {
+	Hdr    nmhdr
+	IPos   int32
+	IDelta int32
+}
+
+// hIconFromICO extracts the first image from raw ICO file bytes and creates an HICON.
+func hIconFromICO(icoData []byte, cx, cy int) uintptr {
+	if len(icoData) < 22 { // 6-byte header + 16-byte directory entry minimum
+		return 0
+	}
+	// ICO directory entry: bytes 14-17 = image size, bytes 18-21 = data offset
+	size := uint32(icoData[14]) | uint32(icoData[15])<<8 | uint32(icoData[16])<<16 | uint32(icoData[17])<<24
+	offset := uint32(icoData[18]) | uint32(icoData[19])<<8 | uint32(icoData[20])<<16 | uint32(icoData[21])<<24
+	if int(offset+size) > len(icoData) {
+		return 0
+	}
+	h, _, _ := procCreateIconFromResourceEx.Call(
+		uintptr(unsafe.Pointer(&icoData[offset])),
+		uintptr(size),
+		1,          // fIcon = TRUE
+		0x00030000, // version
+		uintptr(cx), uintptr(cy),
+		0, // flags
+	)
+	return h
+}
+
+const (
+	WM_SETICON   = 0x0080
+	ICON_SMALL   = 0
+	ICON_BIG     = 1
+	SWP_NOSIZE   = 0x0001
+	SWP_NOZORDER = 0x0004
 )
 
 func runSettings() {
@@ -87,6 +150,9 @@ func runSettings() {
 
 	settingsWndProcCB = syscall.NewCallback(settingsWndProc)
 
+	hIconBig := hIconFromICO(icon.Data, 32, 32)
+	hIconSm := hIconFromICO(icon.Data, 16, 16)
+
 	className, _ := syscall.UTF16PtrFromString("MoniBrightSettings")
 	wc := wndClassExW{
 		LpfnWndProc:   settingsWndProcCB,
@@ -94,6 +160,8 @@ func runSettings() {
 		HCursor:       hCursor,
 		HbrBackground: COLOR_BTNFACE + 1, // system brush
 		LpszClassName: className,
+		HIcon:         hIconBig,
+		HIconSm:       hIconSm,
 	}
 	wc.CbSize = uint32(unsafe.Sizeof(wc))
 	procRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc))) //nolint:errcheck
@@ -106,13 +174,16 @@ func runSettings() {
 		uintptr(WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU),
 		0x80000000, // CW_USEDEFAULT
 		0x80000000,
-		370, 250,
+		370, 290,
 		0, 0, hInst, 0,
 	)
 	if settingsHWND == 0 {
 		log.Printf("settings: CreateWindowExW failed")
 		return
 	}
+
+	// Center on screen
+	centerWindow(settingsHWND)
 
 	hFont, _, _ := procGetStockObject.Call(DEFAULT_GUI_FONT)
 	createSettingsControls(hInst, hFont)
@@ -147,7 +218,7 @@ func createSettingsControls(hInst, hFont uintptr) {
 		uintptr(unsafe.Pointer(buttonClass)),
 		uintptr(unsafe.Pointer(groupText)),
 		WS_CHILD|WS_VISIBLE|BS_GROUPBOX,
-		12, 10, 330, 130,
+		12, 10, 330, 148,
 		settingsHWND, 0, hInst, 0,
 	)
 	setFont(groupBox)
@@ -198,7 +269,7 @@ func createSettingsControls(hInst, hFont uintptr) {
 		settingsHWND, 0, hInst, 0,
 	)
 	procSendMessageW.Call(udDayTemp, UDM_SETBUDDY, editDayTemp, 0)    //nolint:errcheck
-	procSendMessageW.Call(udDayTemp, UDM_SETRANGE32, 2000, 6500)      //nolint:errcheck
+	procSendMessageW.Call(udDayTemp, UDM_SETRANGE32, 3500, 6500)      //nolint:errcheck
 
 	// Label: Night temperature (K):
 	nightLabel, _ := syscall.UTF16PtrFromString("Night temperature (K):")
@@ -233,7 +304,19 @@ func createSettingsControls(hInst, hFont uintptr) {
 		settingsHWND, 0, hInst, 0,
 	)
 	procSendMessageW.Call(udNightTemp, UDM_SETBUDDY, editNightTemp, 0) //nolint:errcheck
-	procSendMessageW.Call(udNightTemp, UDM_SETRANGE32, 2000, 6500)     //nolint:errcheck
+	procSendMessageW.Call(udNightTemp, UDM_SETRANGE32, 3500, 6500)     //nolint:errcheck
+
+	// Hint text
+	hintText, _ := syscall.UTF16PtrFromString("3500K warm \u00B7 4000K neutral \u00B7 5000K cool \u00B7 6500K daylight")
+	hintHWND, _, _ := procCreateWindowExW.Call(
+		0,
+		uintptr(unsafe.Pointer(staticClass)),
+		uintptr(unsafe.Pointer(hintText)),
+		WS_CHILD|WS_VISIBLE,
+		28, 125, 300, 16,
+		settingsHWND, 0, hInst, 0,
+	)
+	setFont(hintHWND)
 
 	// --- Checkbox: Start with Windows (outside group) ---
 	autostartText, _ := syscall.UTF16PtrFromString("Start with Windows")
@@ -242,7 +325,7 @@ func createSettingsControls(hInst, hFont uintptr) {
 		uintptr(unsafe.Pointer(buttonClass)),
 		uintptr(unsafe.Pointer(autostartText)),
 		WS_CHILD|WS_VISIBLE|WS_TABSTOP|BS_AUTOCHECKBOX,
-		12, 152, 200, 20,
+		12, 170, 200, 20,
 		settingsHWND, 0, hInst, 0,
 	)
 	setFont(chkAutostart)
@@ -254,7 +337,7 @@ func createSettingsControls(hInst, hFont uintptr) {
 		uintptr(unsafe.Pointer(buttonClass)),
 		uintptr(unsafe.Pointer(okText)),
 		WS_CHILD|WS_VISIBLE|WS_TABSTOP|BS_DEFPUSHBUTTON,
-		168, 185, 80, 28,
+		168, 203, 80, 28,
 		settingsHWND, IDOK, hInst, 0,
 	)
 	setFont(btnOK)
@@ -265,21 +348,62 @@ func createSettingsControls(hInst, hFont uintptr) {
 		uintptr(unsafe.Pointer(buttonClass)),
 		uintptr(unsafe.Pointer(cancelText)),
 		WS_CHILD|WS_VISIBLE|WS_TABSTOP|BS_PUSHBUTTON,
-		258, 185, 80, 28,
+		258, 203, 80, 28,
 		settingsHWND, IDCANCEL, hInst, 0,
 	)
 	setFont(btnCancel)
+
+	// Subclass edit controls to handle Tab and Enter
+	editSubProcCB := syscall.NewCallback(editSubProc)
+	origDayEditProc, _, _ = procSetWindowLongPtrW.Call(editDayTemp, uintptr(GWLP_WNDPROC), editSubProcCB)
+	origNightEditProc, _, _ = procSetWindowLongPtrW.Call(editNightTemp, uintptr(GWLP_WNDPROC), editSubProcCB)
 }
 
 func settingsWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 	switch msg {
 	case WM_APP_SHOW_SETTINGS:
 		loadSettingsValues()
+		centerWindow(hwnd)
 		procShowWindow.Call(hwnd, SW_SHOW) //nolint:errcheck
 		procSetForegroundWindow.Call(hwnd) //nolint:errcheck
 		return 0
 
+	case WM_NOTIFY:
+		nm := (*nmUpDown)(unsafe.Pointer(lParam))
+		if nm.Hdr.Code == UDN_DELTAPOS {
+			if nm.Hdr.HwndFrom == udDayTemp || nm.Hdr.HwndFrom == udNightTemp {
+				delta := 100
+				if nm.IDelta < 0 {
+					delta = -100
+				}
+				proposed := int(nm.IPos) + delta
+				dayChanged := nm.Hdr.HwndFrom == udDayTemp
+
+				var day, night int
+				if dayChanged {
+					day = proposed
+					nightPos, _, _ := procSendMessageW.Call(udNightTemp, UDM_GETPOS32, 0, 0)
+					night = int(nightPos)
+				} else {
+					dayPos, _, _ := procSendMessageW.Call(udDayTemp, UDM_GETPOS32, 0, 0)
+					day = int(dayPos)
+					night = proposed
+				}
+
+				day, night = enforceTempConstraint(day, night, dayChanged)
+				procSendMessageW.Call(udDayTemp, UDM_SETPOS32, 0, uintptr(day))     //nolint:errcheck
+				procSendMessageW.Call(udNightTemp, UDM_SETPOS32, 0, uintptr(night)) //nolint:errcheck
+				return 1 // cancel default handling; we set values manually
+			}
+		}
+		return 0
+
 	case WM_COMMAND:
+		notifyCode := (wParam >> 16) & 0xFFFF
+		if notifyCode == EN_KILLFOCUS && (lParam == editDayTemp || lParam == editNightTemp) {
+			enforceSettingsConstraints(lParam == editDayTemp)
+			return 0
+		}
 		id := wParam & 0xFFFF
 		switch id {
 		case IDOK:
@@ -337,8 +461,8 @@ func settingsOnOK(hwnd uintptr) {
 	}
 
 	// Clamp to valid range
-	dayTemp = clamp(dayTemp, 2000, 6500)
-	nightTemp = clamp(nightTemp, 2000, 6500)
+	dayTemp = clamp(dayTemp, 3500, 6500)
+	nightTemp = clamp(nightTemp, 3500, 6500)
 
 	autoColorChecked, _, _ := procSendMessageW.Call(chkAutoColor, BM_GETCHECK, 0, 0)
 	newAutoColor := autoColorChecked == BST_CHECKED
@@ -402,6 +526,46 @@ func settingsOnOK(hwnd uintptr) {
 	procShowWindow.Call(hwnd, SW_HIDE) //nolint:errcheck
 }
 
+// enforceSettingsConstraints reads both spinners, applies range + gap constraints,
+// and writes corrected values back. Called on edit field focus loss.
+func enforceSettingsConstraints(dayChanged bool) {
+	dayPos, _, _ := procSendMessageW.Call(udDayTemp, UDM_GETPOS32, 0, 0)
+	nightPos, _, _ := procSendMessageW.Call(udNightTemp, UDM_GETPOS32, 0, 0)
+	day, night := enforceTempConstraint(int(dayPos), int(nightPos), dayChanged)
+	procSendMessageW.Call(udDayTemp, UDM_SETPOS32, 0, uintptr(day))     //nolint:errcheck
+	procSendMessageW.Call(udNightTemp, UDM_SETPOS32, 0, uintptr(night)) //nolint:errcheck
+}
+
+func editSubProc(hwnd, msg, wParam, lParam uintptr) uintptr {
+	switch msg {
+	case WM_KEYDOWN:
+		switch wParam {
+		case VK_TAB:
+			if hwnd == editDayTemp {
+				procSetFocus.Call(editNightTemp) //nolint:errcheck
+			} else {
+				procSetFocus.Call(chkAutostart) //nolint:errcheck
+			}
+			return 0
+		case VK_RETURN:
+			enforceSettingsConstraints(hwnd == editDayTemp)
+			procSendMessageW.Call(hwnd, EM_SETSEL, 0, ^uintptr(0)) //nolint:errcheck
+			return 0
+		}
+	case WM_CHAR:
+		if wParam == '\t' || wParam == '\r' || wParam == '\n' {
+			return 0 // eat to prevent beep
+		}
+	}
+
+	origProc := origDayEditProc
+	if hwnd == editNightTemp {
+		origProc = origNightEditProc
+	}
+	ret, _, _ := procCallWindowProcW.Call(origProc, hwnd, msg, wParam, lParam)
+	return ret
+}
+
 // syncAutoToggle posts a message to the slider window to update the auto toggle text.
 func syncAutoToggle() {
 	select {
@@ -419,12 +583,15 @@ func showSettings() {
 	procPostMessageW.Call(settingsHWND, WM_APP_SHOW_SETTINGS, 0, 0) //nolint:errcheck
 }
 
-func clamp(v, lo, hi int) int {
-	if v < lo {
-		return lo
-	}
-	if v > hi {
-		return hi
-	}
-	return v
+func centerWindow(hwnd uintptr) {
+	var rc sliderRect
+	procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&rc))) //nolint:errcheck
+	w := rc.Right - rc.Left
+	h := rc.Bottom - rc.Top
+	sw, _, _ := procGetSystemMetrics.Call(SM_CXSCREEN)
+	sh, _, _ := procGetSystemMetrics.Call(SM_CYSCREEN)
+	x := (int32(sw) - w) / 2
+	y := (int32(sh) - h) / 2
+	procSetWindowPos.Call(hwnd, 0, uintptr(x), uintptr(y), 0, 0, SWP_NOSIZE|SWP_NOZORDER) //nolint:errcheck
 }
+
