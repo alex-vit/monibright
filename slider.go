@@ -84,7 +84,8 @@ const (
 
 	WM_COMMAND = 0x0111
 
-	ICC_BAR_CLASSES = 0x00000004
+	ICC_BAR_CLASSES    = 0x00000004
+	ICC_UPDOWN_CLASS   = 0x00000010
 
 	WM_CTLCOLORSTATIC = 0x0138
 
@@ -159,7 +160,7 @@ func runSlider() {
 
 	icc := initCommonControlsEx{
 		DwSize: uint32(unsafe.Sizeof(initCommonControlsEx{})),
-		DwICC:  ICC_BAR_CLASSES,
+		DwICC:  ICC_BAR_CLASSES | ICC_UPDOWN_CLASS,
 	}
 	procInitCommonControlsEx.Call(uintptr(unsafe.Pointer(&icc))) //nolint:errcheck
 

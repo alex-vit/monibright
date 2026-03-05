@@ -33,7 +33,6 @@ const (
 
 var (
 	allMonitors []*ddcci.PhysicalMonitor
-	brightItems map[int]*systray.MenuItem
 	mAutostart  *systray.MenuItem
 )
 
@@ -104,6 +103,7 @@ func onReady() {
 	}
 	log.Printf("initialized %d physical monitors", len(allMonitors))
 	go runSlider()
+	go runSettings()
 	if len(allMonitors) == 0 {
 		mErr := systray.AddMenuItem("No usable monitors", "")
 		mErr.Disable()
@@ -112,27 +112,15 @@ func onReady() {
 		return
 	}
 
-	// Menu items: 100, 90, ..., 10 (descending)
-	brightItems = make(map[int]*systray.MenuItem)
-	for i := 10; i >= 1; i-- {
-		level := i * 10
-		item := systray.AddMenuItem(fmt.Sprintf("%d%%", level), fmt.Sprintf("Set brightness to %d%%", level))
-		brightItems[level] = item
-	}
-
-	// Set initial checkmark
+	// Set initial icon from current brightness
 	refreshCheck()
 
-	// Wire up click handlers
-	for level, item := range brightItems {
-		item.Click(func() { setBrightness(level) })
-	}
-
-	// Left-click: floating slider popup. Right-click: preset menu.
+	// Left-click: floating slider popup. Right-click: context menu.
 	systray.SetOnClick(func(menu systray.IMenu) { showSlider() })
 	systray.SetOnRClick(showMenu)
 
-	systray.AddSeparator()
+	// Settings
+	systray.AddMenuItem("Settings...", "Open settings").Click(func() { showSettings() })
 
 	// Autostart toggle
 	mAutostart = systray.AddMenuItem("Start with Windows", "Launch MoniBright at login")
@@ -200,7 +188,6 @@ func refreshCheck() {
 		}
 	}
 
-	checkItem(brightItems, current)
 	updateIcon(current)
 }
 
@@ -259,14 +246,13 @@ func setBrightness(level int) {
 		}
 	}
 
-	checkItem(brightItems, level)
 	updateIcon(level)
 	syncSlider(level)
 }
 
 func showMenu(menu systray.IMenu) {
 	refreshCheck()
-	_ = menu.ShowMenu()
+	menu.ShowMenu()
 }
 
 func toggleAutostart() {
@@ -282,22 +268,6 @@ func toggleAutostart() {
 			return
 		}
 		mAutostart.Check()
-	}
-}
-
-// nearestPreset rounds a brightness level to the nearest 10% preset (10–100).
-func nearestPreset(level int) int {
-	return max(((level+5)/10)*10, 10)
-}
-
-func checkItem(items map[int]*systray.MenuItem, level int) {
-	nearest := nearestPreset(level)
-	for l, item := range items {
-		if l == nearest {
-			item.Check()
-		} else {
-			item.Uncheck()
-		}
 	}
 }
 
