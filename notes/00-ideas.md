@@ -8,7 +8,7 @@
 - `gen_icon.go`: accept a PNG/image file as input and convert to multi-size .ico
 - ~~Self-update via GitHub releases — check on startup, silent download, tray "restart to update" option~~
 - ~~Dynamic tray icon reflecting brightness — bright yellow sun at 100%, nearly eclipsed at 10%~~
-- Customizable color temp lower bound — e.g. match desk lamp at 4000K instead of hardcoded 3500K. Slider min + night temp could be user-configurable.
+- Customizable color temp lower bound — e.g. match desk lamp at 4000K instead of hardcoded 3500K. Slider min + night temp could be user-configurable. Display markers on the slider background for user-set day/night temp bounds so the current position has visual context.
 - Auto brightness — schedule-based like auto color temp. E.g. desk lamp evening ~30%, sunny day 100%, overcast 80%. Could reuse the same sun schedule infrastructure. Needs configurable day/night brightness levels.
 - Embed an app icon via Windows manifest so MoniBright has a proper icon in Start Menu / desktop shortcuts (currently shows generic exe icon)
 - Input source switch — DDC/CI VCP code 0x60 can switch monitor inputs (HDMI1, DP1, etc.); add tray submenu or hotkey
