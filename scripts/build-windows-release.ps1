@@ -20,6 +20,12 @@ try {
   $outDir = Join-Path $RepoRoot "out"
   New-Item -ItemType Directory -Path $outDir -Force | Out-Null
 
+  # Generate Windows resource from manifest (DPI awareness, themed controls)
+  rsrc -manifest main.manifest -o rsrc.syso
+  if ($LASTEXITCODE -ne 0) {
+    throw "rsrc failed — install with: go install github.com/akavel/rsrc@latest"
+  }
+
   $env:GOOS = "windows"
   $env:GOARCH = $Arch
   $env:CGO_ENABLED = "0"
