@@ -2,7 +2,7 @@
 
 Windows system tray app for monitor brightness and color temperature control via DDC/CI.
 
-[Download v1.4.0](https://github.com/alex-vit/monibright/releases/tag/v1.4.0) — **monibright-setup.exe** (installer) or **monibright.exe** (portable)
+[Download v1.4.1](https://github.com/alex-vit/monibright/releases/tag/v1.4.1) — **monibright-setup.exe** (installer) or **monibright.exe** (portable)
 
 <img width="351" height="208" alt="Screenshot (20)" src="https://github.com/user-attachments/assets/e63cf17e-4828-4090-9de1-79cc3ad605db" />
 
