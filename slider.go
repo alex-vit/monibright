@@ -26,8 +26,9 @@ var (
 	procSendMessageW        = user32.NewProc("SendMessageW")
 	procSetForegroundWindow = user32.NewProc("SetForegroundWindow")
 	procSetWindowTextW      = user32.NewProc("SetWindowTextW")
-	procShowWindow          = user32.NewProc("ShowWindow")
-	procTranslateMessage    = user32.NewProc("TranslateMessage")
+	procShowWindow                       = user32.NewProc("ShowWindow")
+	procTranslateMessage                 = user32.NewProc("TranslateMessage")
+	procRegisterPowerSettingNotification = user32.NewProc("RegisterPowerSettingNotification")
 )
 
 var modComctl32 = syscall.NewLazyDLL("comctl32.dll")
@@ -84,8 +85,7 @@ const (
 
 	WM_COMMAND = 0x0111
 
-	ICC_BAR_CLASSES    = 0x00000004
-	ICC_UPDOWN_CLASS   = 0x00000010
+	ICC_BAR_CLASSES = 0x00000004
 
 	WM_CTLCOLORSTATIC = 0x0138
 
@@ -93,6 +93,7 @@ const (
 
 	WM_POWERBROADCAST      = 0x0218
 	PBT_APMRESUMEAUTOMATIC = 0x0012
+	PBT_POWERSETTINGCHANGE = 0x8013
 
 	// Win32 colors are 0x00BBGGRR
 	sliderBgColor   = 0x00202020 // #202020 dark panel
@@ -123,6 +124,28 @@ var (
 
 type sliderPoint struct{ X, Y int32 }
 type sliderRect struct{ Left, Top, Right, Bottom int32 }
+
+type windowsGUID struct {
+	Data1 uint32
+	Data2 uint16
+	Data3 uint16
+	Data4 [8]byte
+}
+
+// GUID_CONSOLE_DISPLAY_STATE {6FE69556-704A-47A0-8F24-C28D936FDA47}
+// Notifies when the display turns off (0), on (1), or dims (2).
+var guidConsoleDisplayState = windowsGUID{
+	Data1: 0x6FE69556,
+	Data2: 0x704A,
+	Data3: 0x47A0,
+	Data4: [8]byte{0x8F, 0x24, 0xC2, 0x8D, 0x93, 0x6F, 0xDA, 0x47},
+}
+
+type powerBroadcastSetting struct {
+	PowerSetting windowsGUID
+	DataLength   uint32
+	Data         [1]byte
+}
 
 type appBarData struct {
 	CbSize           uint32
@@ -160,7 +183,7 @@ func runSlider() {
 
 	icc := initCommonControlsEx{
 		DwSize: uint32(unsafe.Sizeof(initCommonControlsEx{})),
-		DwICC:  ICC_BAR_CLASSES | ICC_UPDOWN_CLASS,
+		DwICC:  ICC_BAR_CLASSES,
 	}
 	procInitCommonControlsEx.Call(uintptr(unsafe.Pointer(&icc))) //nolint:errcheck
 
@@ -296,6 +319,9 @@ func runSlider() {
 		}
 	}()
 
+	// Register for monitor power state changes (sleep/wake).
+	procRegisterPowerSettingNotification.Call(sliderHWND, uintptr(unsafe.Pointer(&guidConsoleDisplayState)), 0) //nolint:errcheck
+
 	close(sliderReady)
 
 	var m wmMsg
@@ -396,16 +422,19 @@ func sliderWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 		}
 		return 0
 	case WM_POWERBROADCAST:
-		if wParam == PBT_APMRESUMEAUTOMATIC {
-			log.Printf("wake detected")
-			if autoColorActive {
-				select {
-				case autoColorWake <- struct{}{}:
-				default:
+		switch wParam {
+		case PBT_APMRESUMEAUTOMATIC:
+			log.Printf("power: PBT_APMRESUMEAUTOMATIC")
+			handleDisplayWake("system resume")
+		case PBT_POWERSETTINGCHANGE:
+			pbs := (*powerBroadcastSetting)(unsafe.Pointer(lParam))
+			if pbs.PowerSetting == guidConsoleDisplayState {
+				state := pbs.Data[0]
+				names := map[byte]string{0: "off", 1: "on", 2: "dimmed"}
+				log.Printf("power: display state → %s (%d)", names[state], state)
+				if state == 1 {
+					handleDisplayWake("monitor on")
 				}
-			} else {
-				log.Printf("wake: reapplying color temp %dK", currentColorTemp)
-				go applyColorTemp(currentColorTemp)
 			}
 		}
 		return 1
@@ -520,6 +549,20 @@ func requestBrightness(level int) {
 func updatePctLabel(pct int) {
 	text, _ := syscall.UTF16PtrFromString(fmt.Sprintf("%d%%", pct))
 	procSetWindowTextW.Call(sliderPctHWND, uintptr(unsafe.Pointer(text))) //nolint:errcheck
+}
+
+// handleDisplayWake reapplies the current color temperature after the display
+// comes back. Windows resets the gamma ramp to linear (6500K) on monitor
+// sleep/wake, so we must always reapply — even if the target temp hasn't changed.
+func handleDisplayWake(reason string) {
+	log.Printf("wake (%s): reapplying color temp %dK", reason, currentColorTemp)
+	go applyColorTemp(currentColorTemp)
+	if autoColorActive {
+		select {
+		case autoColorWake <- struct{}{}:
+		default:
+		}
+	}
 }
 
 // syncSlider posts the current brightness level to the slider window so it
